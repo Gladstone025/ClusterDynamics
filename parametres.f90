@@ -4,7 +4,6 @@ module parametres
 use prec_mod
 
 implicit none
-!integer, parameter :: dp = selected_real_kind(15,7)
 real(dp), parameter :: Pi = 3.14159265359
 
 
@@ -14,6 +13,7 @@ integer, parameter :: N_buff = 50
 real(dp) :: M_queue = 0 
 real(dp) :: Cvac
 logical :: quasi 
+integer :: etape, methode, cas_physique, Nmax
 
 !! --------------------------- Parametres CVODE ----------------------------- !!
 real(dp) :: T, T0, TF
@@ -32,8 +32,9 @@ integer, parameter :: itask = 1
 integer(c_long), dimension(21) :: iout
 real(dp), dimension(6) :: rout
 integer(c_long) :: maxerrfail, nitermax
-integer :: etape, methode, cas_physique, model, Nmax
 integer(c_long) :: Neq
+integer :: Nv, Ni, mv, mi, Nmaxv, Nmaxi
+real(dp), dimension(:,:), allocatable :: Alpha_tab, Beta_tab
 
 !! ----------------------- Parametres stochastiques ------------------------- !!
 integer, parameter :: Taille = 500000
@@ -71,7 +72,6 @@ real(dp), parameter :: Cq = 1.e-7
 real(dp), parameter :: G1 = 0._dp
 
 !! -------------- Paramètres physiques (Fe) irradiation --------------- !!
-
 real(dp), parameter :: a      = 2.87e-10
 real(dp), parameter :: V_at   = (a**3)/2.d0
 real(dp), parameter :: b      = a
@@ -103,8 +103,8 @@ real(dp), parameter :: Eb_4i  = 1.64*evJ
 real(dp), parameter :: rho_c  = a/2.d0
 real(dp), parameter :: Z_v    = 1.d0
 real(dp), parameter :: Z_i    = 1.1d0
-real(dp), parameter :: mu     = 82.e9
-real(dp), parameter :: nu     = 0.29e9
+real(dp), parameter :: mu     = 82._dp
+real(dp), parameter :: nu     = 0.29_dp
 real(dp), parameter :: TempFe = 563
 real(dp), parameter :: T_max  = 0.1/(3.87e-9)
 real(dp), parameter :: rho_d  = 1.e12
@@ -208,7 +208,9 @@ end function
 function beta_nm(n,m)
 	implicit none
 	real(dp) :: n, m, beta_nm
-	if ((n*m < 0) .and. (Z_v*(r_n(n)+r_n(m)) < r_iv)) then
+	if ((n.eq.0) .or. (m.eq.0)) then
+		beta_nm = 0._dp
+	elseif ((n*m < 0) .and. (Z_v*(r_n(n)+r_n(m)) < r_iv)) then
 		if (m < 0) then
 			beta_nm = 4.*pi*r_iv*D_v
 		else
@@ -256,9 +258,9 @@ function Eb_ii(n)
 	elseif (n .eq. 4) then
 		Eb_ii = Eb_4i
 	else
-		rn = sqrt(n*V_at/(pi*b))
-		rn_1 = sqrt((n-1)*V_at/(pi*b))
-		Eb_ii = Ef_i + ((rn_1*mu*b*b)/(2*(1-nu)))*(log(4*rn_1/rho_c)-1) - ((rn*mu*b*b)/(2*(1-nu)))*(log(4*rn/rho_c)-1) 
+		rn = sqrt(n*V_at/(Pi*b))
+		rn_1 = sqrt((n-1)*V_at/(Pi*b))
+		Eb_ii = Ef_i + 1e9*(((rn_1*mu*b*b)/(2*(1-nu)))*(log(4*rn_1/rho_c)-1) - ((rn*mu*b*b)/(2*(1-nu)))*(log(4*rn/rho_c)-1)) 
 	endif
 end function
 
@@ -273,8 +275,11 @@ end function
 function alpha_nm(n, m)
 	implicit none
 	real(dp) :: n, m, alpha_nm
+	! cas non physiques
+	if (n.eq.m .or. n.eq.0 .or. m.eq.0) then
+		alpha_nm = 0._dp
 	! cas lacune-lacune
-	if (n < 0 .and. m < 0) then 
+	elseif (n < 0 .and. m < 0) then 
 		alpha_nm = beta_nm(n-m,m)/V_at*exp(-Eb_vv(n)/(k_b*TempFe))
 	! cas lacune-interstitiel
 	elseif (n > 0 .and. m < 0) then
@@ -287,6 +292,7 @@ function alpha_nm(n, m)
 		alpha_nm = beta_nm(n-m,m)/V_at*exp(-Eb_iv(n)/(k_b*TempFe))
 	endif
 end function
+
 
 
 

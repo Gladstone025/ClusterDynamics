@@ -2,11 +2,10 @@ program Couplage
 
 use prec_mod
 use parametres
+use init_mod
 use tools
 use stochastique
 use fonctioncvode
-!use data_fun
-!use deterministe
 use mpi
 
 implicit none
@@ -15,7 +14,7 @@ integer :: io
 real(dp) :: DeltaT = 100._dp
 real(dp) :: Mtemp
 
-namelist /parameter/etape,dt_sto,methode,model
+namelist /parameter/etape,dt_sto,methode,cas_physique
 
 open(8,file="parametre_entree")!, status='OLD', recl=80, delim='APOSTROPHE')
 
@@ -217,6 +216,16 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	
 call MPI_FINALIZE(ierror)	
 
+
+case(3)
+
+	call init()
+	
+	do iloop = -20,200
+		print *, iloop, Alpha_tab(iloop,-1), Alpha_tab(iloop,1), Beta_tab(iloop,-1), Beta_tab(iloop,1)
+	end do
+	
+	call finalize()
 
 end select
 
