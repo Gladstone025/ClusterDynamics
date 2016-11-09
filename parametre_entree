@@ -1,0 +1,6 @@
+&PARAMETER
+etape = 2,
+dt_sto = 10.
+methode = 2
+model = 1
+&end
