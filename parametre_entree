@@ -2,5 +2,5 @@
 etape = 3,
 dt_sto = 10.
 methode = 2
-cas_physique = 1
+cas_physique = 2
 &end

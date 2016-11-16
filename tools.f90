@@ -26,7 +26,7 @@ implicit none
 	write( sTime, '(f8.1)' )  T
 	write(*,*) sTime
 
-	fic = '../Data/Distribution_'//trim(adjustl(sTime))
+	fic = '../Data_Fe/Distribution_'//trim(adjustl(sTime))
 	open(unit=1,file=fic,status='replace')
 	do jloop = 1, size(C)
 		write(1,'(2(E15.6E3))') float(jloop), C(jloop)   

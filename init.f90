@@ -18,19 +18,19 @@ end function
 subroutine init()
 	implicit none
 	
-	Ni = 3000
-	Nv = 100
+	Ni = 30000
+	Nv = 1000
 	Neq = 1 + Ni + Nv
-	Nmaxi = 3000
-	Nmaxv = 100
+	Nmaxi = 30000
+	Nmaxv = 1000
 	mv = 1
 	mi = 1
 	! Allocation des principaux tableaux
 	allocate(C(Neq))
 	allocate(C_init(Neq))
-	allocate(C_stotodis(Neq))
-	allocate(MPI_C_stotodis(Neq))
-	allocate(C_sto(Nmax))
+	!allocate(C_stotodis(Neq))
+	!allocate(MPI_C_stotodis(Neq))
+	!allocate(C_sto(Nmax))
 	
 	! Allocation et calcul des coefficients alpha/beta
 	allocate(Alpha_tab(-Nmaxv:Nmaxi,-mv:mi))
@@ -55,9 +55,9 @@ subroutine finalize()
 	
 	deallocate(C)
 	deallocate(C_init)
-	deallocate(C_stotodis)
-	deallocate(MPI_C_stotodis)
-	deallocate(C_sto)
+	!deallocate(C_stotodis)
+	!deallocate(MPI_C_stotodis)
+	!deallocate(C_sto)
 
 
 end subroutine finalize

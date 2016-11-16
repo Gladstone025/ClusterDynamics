@@ -110,10 +110,10 @@ real(dp), parameter :: T_max  = 0.1/(3.87e-9)
 real(dp), parameter :: rho_d  = 1.e12
 real(dp), parameter :: l_gb   = 100.e-6
 real(dp), parameter :: k_b    = 1.38064852e-23
-real(dp), parameter :: G_v    = 2.322e-10/V_at*1e4
-real(dp), parameter :: G_i    = 1.1606517e-9/V_at*1e4
-real(dp), parameter :: G_8v   = 1.161e-10/V_at*1e4
-real(dp), parameter :: G_4i   = 8.7075e-14/V_at*1e4
+real(dp), parameter :: G_v    = 2.322e-10/V_at
+real(dp), parameter :: G_i    = 1.1606517e-9/V_at
+real(dp), parameter :: G_8v   = 1.161e-10/V_at
+real(dp), parameter :: G_4i   = 8.7075e-14/V_at
 
 real(dp), parameter :: D_v    = D_0*exp(-Em_v/(k_b*TempFe))
 real(dp), parameter :: D_i    = D_0*exp(-Em_i/(k_b*TempFe))

@@ -14,7 +14,7 @@ contains
 subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 	implicit none
 	real(dp) :: T, Conc1, Concvac, Concinter
-	real(dp) :: bCnCi, bCnCv, aCi, aCv
+	real(dp) :: bCnCi, bCnCv, aCi, aCv, Sv, Si
 	integer(c_int) :: IER
 	real(dp), dimension(1:Neq) :: Conc, ConcP
 	real(dp), dimension(:) :: RPAR
@@ -42,6 +42,8 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 		bCnCv = 0._dp
 		aCi = 0._dp
 		aCv = 0._dp
+		Si = 0._dp
+		Sv = 0._dp
 		ConcP(1:Neq) = 0.d0
 		IER = 0
 		Concvac = Conc(tab_fe(-1,Nv))
@@ -82,12 +84,16 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 				bCnCv = bCnCv - Beta_tab(iloop,-1)*Conc(tab_fe(iloop,Nv))*Concvac
 				aCi = aCi + Alpha_tab(iloop+1,1)*Conc(tab_fe(iloop+1,Nv))
 				aCv = aCv + Alpha_tab(iloop-1,-1)*Conc(tab_fe(iloop-1,Nv))
+				Si = Si + Beta_tab(iloop,1)*Conc(tab_fe(iloop,Nv))
+				Sv = Sv + Beta_tab(iloop,-1)*Conc(tab_fe(iloop,Nv))
 			enddo
 			do iloop = -Nv + 2, -2 
 				bCnCi = bCnCi - Beta_tab(iloop,1)*Conc(tab_fe(iloop,Nv))*Concinter
 				bCnCv = bCnCv - Beta_tab(iloop,-1)*Conc(tab_fe(iloop,Nv))*Concvac
 				aCi = aCi + Alpha_tab(iloop+1,1)*Conc(tab_fe(iloop+1,Nv))
 				aCv = aCv + Alpha_tab(iloop-1,-1)*Conc(tab_fe(iloop-1,Nv))
+				Si = Si + Beta_tab(iloop,1)*Conc(tab_fe(iloop,Nv))
+				Sv = Sv + Beta_tab(iloop,-1)*Conc(tab_fe(iloop,Nv))
 			enddo
 			! contribution amas mobiles
 			bCnCi = bCnCi - 2._dp*Beta_tab(1,1)*Conc(tab_fe(1,Nv))*Conc(tab_fe(1,Nv)) - Beta_tab(-1,1)*Conc(tab_fe(-1,Nv))*Concinter + &
@@ -96,9 +102,13 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 			bCnCv = bCnCv - 2._dp*Beta_tab(-1,-1)*Conc(tab_fe(-1,Nv))*Conc(tab_fe(-1,Nv)) - Beta_tab(1,-1)*Conc(tab_fe(1,Nv))*Concvac + &
 					&Beta_tab(-2,1)*Conc(tab_fe(-2,Nv))*Conc(tab_fe(1,Nv)) - Beta_tab(-1,1)*Conc(tab_fe(-1,Nv))*Conc(tab_fe(1,Nv))
 			aCv = aCv - Alpha_tab(-1,1)*Conc(tab_fe(-1,Nv)) + 2._dp*Alpha_tab(-2,-1)*Conc(tab_fe(-2,Nv))
+			Si = Si + Beta_tab(-1,1)*(Conc(tab_fe(-1,Nv))+Conc(tab_fe(1,Nv)))
+			Sv = Sv + Beta_tab(1,-1)*(Conc(tab_fe(1,Nv))+Conc(tab_fe(-1,Nv)))
 			! contribution totale
-			ConcP(tab_fe(1,Nv)) = G_i + bCnCi + aCi !- Z_i*rho_d*D_i*(Concinter-Ci_eq) - 6._dp/l_gb*sqrt(Z_i*rho_d+bCnCi/D_i)*D_i*(Concinter-Ci_eq)
-			ConcP(tab_fe(-1,Nv)) = G_v + bCnCv + aCv !- Z_v*rho_d*D_v*(Concvac-Cv_eq) - 6._dp/l_gb*sqrt(Z_v*rho_d+bCnCv/D_v)*D_v*(Concvac-Cv_eq)
+			ConcP(tab_fe(1,Nv)) = G_i + bCnCi + aCi - Z_i*rho_d*D_i*(Concinter-Ci_eq) - &
+										&6._dp/l_gb*sqrt(Z_i*rho_d+Si/D_i)*D_i*(Concinter-Ci_eq)
+			ConcP(tab_fe(-1,Nv)) = G_v + bCnCv + aCv - Z_v*rho_d*D_v*(Concvac-Cv_eq) - &
+										&6._dp/l_gb*sqrt(Z_v*rho_d+Sv/D_v)*D_v*(Concvac-Cv_eq)
 		end if
 	else
 		print *, "Cas physique inexistant"

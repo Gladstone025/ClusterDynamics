@@ -20,7 +20,7 @@ open(8,file="parametre_entree")!, status='OLD', recl=80, delim='APOSTROPHE')
 
 read (8, nml=parameter)
 
-Neq = 250
+
 Nmax = 2000
 
 select case (etape)
@@ -28,6 +28,8 @@ select case (etape)
 ! Methode explicite !
 case(1)
 
+	Neq = 250
+	
 	allocate(C(Neq))
 	allocate(C_init(Neq))
 
@@ -217,15 +219,92 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 call MPI_FINALIZE(ierror)	
 
 
+
+
 case(3)
 
-	call init()
+	Ni = 5000
+	Nv = 1000
+	Neq = 1 + Ni + Nv
+	Nmaxi = 5000
+	Nmaxv = 1000
+	mv = 1
+	mi = 1
+	! Allocation des principaux tableaux
+	allocate(C(Neq))
+	allocate(C_init(Neq))
+	!allocate(C_stotodis(Neq))
+	!allocate(MPI_C_stotodis(Neq))
+	!allocate(C_sto(Nmax))
 	
-	do iloop = -20,200
-		print *, iloop, Alpha_tab(iloop,-1), Alpha_tab(iloop,1), Beta_tab(iloop,-1), Beta_tab(iloop,1)
+	! Allocation et calcul des coefficients alpha/beta
+	allocate(Alpha_tab(-Nmaxv:Nmaxi,-mv:mi))
+	allocate(Beta_tab(-Nmaxv:Nmaxi,-mv:mi))
+	
+	do iloop = -Nmaxv,Nmaxi
+		do jloop = -mv,mi
+			Alpha_tab(iloop,jloop) = alpha_nm(real(iloop,8),real(jloop,8))
+			Beta_tab(iloop,jloop) = beta_nm(real(iloop,8),real(jloop,8))
+		end do 
 	end do
+	!print *, '-200', Alpha_tab(-200,-1), Alpha_tab(-200,1), Beta_tab(-200,-1), Beta_tab(-200,1)
+	!print *, '200', Alpha_tab(200,-1), Alpha_tab(200,1), Beta_tab(200,-1), Beta_tab(200,1)
+	print *, "init ok"
+
+	call fnvinits(isolver,Neq,IER)
+	if (IER /= 0) then
+		write(*,*) 'ERROR in fnvinits'
+		stop
+	end if
+	print *, "init ok 2"
+	T = 0._dp
+	T0 = 0._dp
+	TF = 100._dp
+	abstol = 1e-20_dp
+	reltol = 1e-5_dp
+	C_init(1) = Cq
+	C_init(2:Neq) = 0._dp
+
+	call fcvmalloc(T,C_init,meth,itmeth,iatol,reltol,abstol,Iout,Rout,IPAR,RPAR,IER)
+	if (IER /= 0) then
+		write(*,*) 'ERROR in fcvmalloc', IER
+		stop
+	end if
+	print *, "alloc ok"
+	maxerrfail = 15
+	nitermax = 10000
+
+	call fcvsetiin('MAX_NSTEPS',nitermax,IER)
+	call fcvsetiin('MAX_ERRFAIL',maxerrfail,IER)
+	if (IER /= 0) then
+		write(*,*) 'ERROR in fcvsetiin'
+		stop
+	end if
+	print *, "setting ok"
+	call fcvdense(Neq,IER)
+	if (IER /= 0) then
+		write(*,*) 'ERROR in fcvdense', IER
+		stop
+	end if
+	print *, "dense ok"
+	!TF = 0.001_dp
+	TF = 2.58397_dp
+	do mainloop = 1,5
+		print *, mainloop
+		call fcvode(TF,T,C,itask,IER)
+		call output(C,T)
+		TF = TF*10._dp
+	enddo
+
+	deallocate(C)
 	
-	call finalize()
+	
+
+
+
+
+
+
 
 end select
 
