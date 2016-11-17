@@ -11,7 +11,7 @@ real(dp), parameter :: Pi = 3.14159265359
 integer, parameter :: N_front = 200
 integer, parameter :: N_buff = 50
 real(dp) :: M_queue = 0 
-real(dp) :: Cvac
+real(dp), dimension(1) :: Cvac
 logical :: quasi 
 integer :: etape, methode, cas_physique, Nmax
 
@@ -19,6 +19,7 @@ integer :: etape, methode, cas_physique, Nmax
 real(dp) :: T, T0, TF
 integer(c_int) :: IER
 real(dp), dimension(:), allocatable :: C, C_init, C_stotodis
+real(dp), dimension(:), allocatable :: C_Inter, C_Vac, C_mob
 real(dp), dimension(1) :: RPAR
 integer(c_long), dimension(1) :: IPAR
 real(dp) :: tt, tout
@@ -45,6 +46,7 @@ real(dp) :: N_0 = real(N_front+N_buff/5._dp,8)
 real(dp) :: alpha_m = real(N_buff/10._dp,8)
 real(dp) :: dt_sto
 real(dp) :: MStochastique, MDiscret
+real(dp) :: MStoInter, MStoVac, MDisInter, MDisVac
 
 !! ---------------------------- Parametres MPI ------------------------------ !!
 integer :: rank, numproc, ierror
@@ -166,20 +168,20 @@ function alphav(x)
 	alphav = ww*x**(1./3.)*Dv*exp(-Evb/(kb*Temp))         
 end function
 
-function F_vec(x,C1)
+function F_vec(x,Conc1)
 	implicit none
 	real(dp),dimension(:) :: x
 	real(dp),dimension(1:size(x)):: F_vec
-	real(dp) :: C1
-	F_vec = betav(x)*C1 - alphav(x)    
+	real(dp) :: Conc1
+	F_vec = betav(x)*Conc1 - alphav(x)    
 end function
 
-function D_vec(x,C1)
+function D_vec(x,Conc1)
 	implicit none
 	real(dp),dimension(:) :: x
 	real(dp),dimension(1:size(x)):: D_vec
-	real(dp) :: C1
-	D_vec = betav(x)*C1 + alphav(x)     
+	real(dp) :: Conc1
+	D_vec = betav(x)*Conc1 + alphav(x)     
 end function
 
 
@@ -294,6 +296,30 @@ function alpha_nm(n, m)
 end function
 
 
+
+function F_fe(x,ConcMob)
+	implicit none
+	real(dp) :: x
+	real(dp) :: F_fe
+	real(dp), dimension(-mv:mi) :: ConcMob
+	F_fe = 0._dp
+	do iloop = -mv, mi
+		rloop = real(iloop,8)
+		F_fe = F_fe + rloop*(beta_nm(x,rloop)*ConcMob(iloop)-alpha_nm(x,rloop)) 
+	end do
+end function
+
+function D_fe(x,ConcMob)
+	implicit none
+	real(dp) :: x
+	real(dp) :: D_fe
+	real(dp), dimension(-mv:mi) :: ConcMob
+	D_fe = 0._dp
+	do iloop = -mv, mi
+		rloop = real(iloop,8)
+		D_fe = D_fe + 0.5_dp*rloop*rloop*(beta_nm(x,rloop)*ConcMob(iloop) + alpha_nm(x,rloop))
+	end do
+end function
 
 
 

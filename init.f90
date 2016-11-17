@@ -33,8 +33,10 @@ subroutine init()
 	!allocate(C_sto(Nmax))
 	
 	! Allocation et calcul des coefficients alpha/beta
-	allocate(Alpha_tab(-Nmaxv:Nmaxi,-mv:mi))
-	allocate(Beta_tab(-Nmaxv:Nmaxi,-mv:mi))
+	allocate(Alpha_tab(-Nmaxv:Nmaxi,-max(mv,mi):max(mv,mi)))
+	allocate(Beta_tab(-Nmaxv:Nmaxi,-max(mv,mi):max(mv,mi)))
+	Alpha_tab = 0._dp
+	Beta_tab = 0._dp
 	
 	do iloop = -Nmaxv,Nmaxi
 		do jloop = -mv,mi
