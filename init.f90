@@ -8,11 +8,11 @@ implicit none
 CONTAINS
 
 
-function tab_fe(pos,debut)
-	implicit none
-	integer :: tab_fe, pos, debut
-	tab_fe = 1 + debut + pos
-end function
+!function tab_fe(pos,debut)
+!	implicit none
+!	integer :: tab_fe, pos, debut
+!	tab_fe = 1 + debut + pos
+!end function
 
 
 subroutine init()

@@ -149,6 +149,7 @@ function Metropolis(Conc,N_0,alpha_m,Npart)
 	real(dp), dimension(1:Npart) :: Metropolis
 	n0 = N_0
 	Ntot = size(Conc)
+	print *, size(Conc)
 	do iloop = 1, Npart
 		call random_number(uniform)
 		alea = -alpha_m + 2.*alpha_m*uniform
@@ -255,21 +256,59 @@ function Multinomial(Conc,Nmin,Nmax,Npart)
 end function
 
 
+function Inboundary(x,InterVac,a)
+	implicit none
+	real(dp) :: x, a ! a sert a prendre en compte la masse qui depasse un peu
+					 ! du fait de la methode des noyaux
+	integer :: InterVac
+	logical :: Inboundary
+	Inboundary = .False.
+	
+	select case (InterVac)
+	! - Cas simple
+	case(0)
+		if (x < N_front+a) then
+			Inboundary = .True.
+		end if
+	! - Cas lacunes
+	case(-1)
+		if (x > Nf_Vac-a) then
+			Inboundary = .True.
+		end if
+	! - Cas Interstitiel
+	case(1)
+		if (x < Nf_Inter+a) then
+			Inboundary = .True.
+		end if	
+	end select
+end function
 
+! a reecrire
 function StotoDiscret(HLangevin,InterVac)
 	implicit none
 	integer :: InterVac
 	real(dp), dimension(:) :: HLangevin
-	real(dp), dimension(N_front+N_buff) :: Conc, StotoDiscret
+	real(dp), dimension(:), allocatable :: Conc, StotoDiscret
 	integer :: Npart, n, ninf
 	Conc = 0._dp
 	ninf = 0
 	Npart = size(HLangevin)
 	! Penser a ecrire une fonction du type "Inboundary" qui renvoit un booleen
+	select case (InterVac)
+	case(0)
+		allocate(Conc(1:N_front+N_buff))
+		allocate(StotoDiscret(1:N_front+N_buff))
+	case(1)
+		allocate(Conc(1:Nf_Inter+Nb_Inter))
+		allocate(StotoDiscret(1:Nf_Inter+Nb_Inter))
+	case(-1)
+		allocate(Conc(Nf_Vac-Nb_Vac:-1))
+		allocate(StotoDiscret(Nf_Vac-Nb_Vac:-1))
+	end select
 	do iloop = 1, Npart
-		if (HLangevin(iloop) < N_front+2.) then
+		if (Inboundary(HLangevin(iloop),InterVac,2._dp)) then
 			n = nint(HLangevin(iloop))
-			if (HLangevin(iloop) < N_front) then
+			if (Inboundary(HLangevin(iloop),InterVac,0._dp)) then
 				ninf = ninf + 1
 			end if
 			do kloop = -5, 5
@@ -303,7 +342,7 @@ function Sampling(Conc,HLangevin,InterVac)
 	integer :: InterVac
 	real(dp), dimension(:) :: Conc
 	real(dp), dimension(:) :: HLangevin
-	real(dp), dimension(size(Conc)) :: Conc_buff
+	real(dp), dimension(:), allocatable :: Conc_buff
 	real(dp), dimension(size(HLangevin)) :: Sampling
 	real(dp), dimension(:), allocatable :: Htot, Hsto
 	real(dp), dimension(:), allocatable :: Sampling_inter
@@ -316,25 +355,50 @@ function Sampling(Conc,HLangevin,InterVac)
 	compt = 0
 	Npart = size(HLangevin)
 	a = 0.5
-	Conc_buff = 0._dp
-	Conc_buff(N_front:N_front+N_buff) = Conc(N_front:N_front+N_buff)
-	Npart = size(HLangevin)
-	Mconc = sum(Conc(N_front:N_front+N_buff))
 	if (InterVac.eq.0) then
+		allocate(Conc_buff(1:Neq))
+		Conc_buff = 0._dp
+		Conc_buff(N_front:N_front+N_buff) = Conc(N_front:N_front+N_buff)
+		Npart = size(HLangevin)
+		Mconc = sum(Conc(N_front:N_front+N_buff))
 		Nconc = int(Mconc*Npart/MStochastique)
 		MStochastique = MStochastique + Mconc
 	else if (InterVac.eq.1) then
+		allocate(Conc_buff(1:Ni))
+		Conc_buff = 0._dp
+		Conc_buff(Nf_Inter:Nf_Inter+Nb_Inter) = Conc(Nf_Inter:Nf_Inter+Nb_Inter)
+		Npart = size(HLangevin)
+		Mconc = sum(Conc(Nf_Inter:Nf_Inter+Nb_Inter))
 		Nconc = int(Mconc*Npart/MStoInter)
 		MStoInter = MStoInter + Mconc	
 	else if (InterVac.eq.(-1)) then
+		allocate(Conc_buff(-Nv:-1))
+		Conc_buff = 0._dp
+		Conc_buff(Nf_Vac-Nb_Vac:Nf_Vac) = Conc(Nf_Vac-Nb_Vac:Nf_Vac)
+		Npart = size(HLangevin)
+		Mconc = sum(Conc(Nf_Vac-Nb_Vac:Nf_Vac))
 		Nconc = int(Mconc*Npart/MStoVac)
 		MStoVac = MStoVac + Mconc		
 	end if
 	allocate(Hsto(Nconc))
 	if (methode.eq.1) then
-		Hsto = Multinomial(Conc_buff,N_front,N_front+N_buff,Nconc)
+		select case (InterVac)
+		case(0)
+			Hsto = Multinomial(Conc_buff,N_front,N_front+N_buff,Nconc)
+		case(1)
+			Hsto = Multinomial(Conc_buff,Nf_Inter,Nf_Inter+Nb_Inter,Nconc)
+		case(-1)
+			Hsto = Multinomial(Conc_buff,Nf_Vac-Nb_Vac,Nf_Vac,Nconc)
+		end select
 	else 
-		Hsto = Metropolis(Conc_buff,real(N_front+N_buff/5._dp,8),real(N_buff/10._dp,8),Nconc)
+		select case (InterVac)
+		case(0)
+			Hsto = Metropolis(Conc_buff,real(N_front+N_buff/5._dp,8),real(N_buff/10._dp,8),Nconc)
+		case(1)
+			Hsto = Metropolis(Conc_buff,real(Nf_Inter+Nb_Inter/5._dp,8),real(Nb_Inter/10._dp,8),Nconc)
+		case(-1)
+			Hsto = Metropolis(Conc_buff,real(Nf_Vac-Nb_Vac/5._dp,8),real(Nb_Vac/10._dp,8),Nconc)
+		end select
 	end if
 	allocate(Htot(Npart+Nconc))
 	Htot(1:Npart) = HLangevin(1:Npart)
@@ -342,7 +406,7 @@ function Sampling(Conc,HLangevin,InterVac)
 	! -- Htot contient *toutes* les particules
 	! -- On compte celles qui contribuent a la partie deterministe
 	do iloop = 1, Npart+Nconc
-		if (Htot(iloop) < N_front) then
+		if (Inboundary(Htot(iloop),InterVac,0._dp)) then
 			Ninf = Ninf+1
 		endif
 	end do
@@ -351,7 +415,7 @@ function Sampling(Conc,HLangevin,InterVac)
 	if (Ndiff < 0) then ! -- il faudra dupliquer des particules
 	print *, "DUPLICATION"
 		do iloop = 1, Npart+Nconc
-			if (Htot(iloop).ge.N_front) then
+			if (.not.Inboundary(Htot(iloop),InterVac,0._dp)) then
 				compt = compt+1
 				Sampling(compt) = Htot(iloop)
 				nsto = nint(Htot(iloop))
@@ -374,7 +438,7 @@ function Sampling(Conc,HLangevin,InterVac)
 		allocate(Sampling_inter(Npart+Ndiff))
 		compt = 0
 		do iloop = 1, Npart+Nconc
-			if (Htot(iloop).ge.N_front) then
+			if (.not.Inboundary(Htot(iloop),InterVac,0._dp)) then
 				compt = compt+1
 				Sampling_inter(compt) = Htot(iloop)
 			endif

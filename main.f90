@@ -93,6 +93,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	call init_random_seed
 
 	! --- Initialisation du solver
+	Neq = 250
 	allocate(C(Neq))
 	allocate(C_init(Neq))
 	allocate(C_stotodis(Neq))
@@ -319,8 +320,8 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	call init_random_seed
 
 	! --- Initialisation du solver
-	Ni = 5000
-	Nv = 1000
+	Ni = 250
+	Nv = 150
 	Neq = 1 + Ni + Nv
 	Nmaxi = 5000
 	Nmaxv = 1000
@@ -328,12 +329,25 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	mi = 1
 	allocate(C(Neq))
 	allocate(C_init(Neq))
-	allocate(C_stotodis(Neq))
-	allocate(MPI_C_stotodis(Neq))
-	allocate(C_sto(1200))
+	allocate(C_stotodis(Nf_Vac-Nb_Vac:Nf_Inter+Nb_Inter))
+	allocate(MPI_C_stotodis(Nf_Vac-Nb_Vac:Nf_Inter+Nb_Inter))
+	allocate(C_sto(-1200:1200))
+	allocate(C_sto_Inter(1200))
+	allocate(C_sto_Vac(1200))
 	allocate(C_Inter(1:Ni))
 	allocate(C_Vac(-Nv:-1))
-	allocate(C_mob(-mv:mi))
+	allocate(C_Mob(-mv:mi))
+	allocate(MPI_C_mob(-mv:mi))
+	
+	allocate(Alpha_tab(-Nmaxv:Nmaxi,-mv:mi))
+	allocate(Beta_tab(-Nmaxv:Nmaxi,-mv:mi))
+	
+	do iloop = -Nmaxv,Nmaxi
+		do jloop = -mv,mi
+			Alpha_tab(iloop,jloop) = alpha_nm(real(iloop,8),real(jloop,8))
+			Beta_tab(iloop,jloop) = beta_nm(real(iloop,8),real(jloop,8))
+		end do 
+	end do
 	
 	call fnvinits(isolver,Neq,IER)
 	if (IER /= 0) then
@@ -343,7 +357,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 
 	T = 0._dp
 	T0 = 0._dp
-	TF = 100._dp
+	TF = 10._dp
 	abstol = 1e-18_dp
 	reltol = 1e-5_dp
 	C_init(1) = Cq
@@ -376,66 +390,84 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	
 	! --- On propage en full EDO jusqu'au critere d'arret
 	quasi = .False.
-	do while (M_queue < Cq/1000._dp) ! 0.1% de la masse totale se trouve dans la queue
+	do while (C(tab_fe(200,Nv)) < 1._dp) ! 0.1% de la masse totale se trouve dans la queue
 		call fcvode(TF,T,C,itask,IER)
 		call output(C,T)
-		M_queue = Mtail(C,N_front,N_front+N_buff)
+		!M_queue = Mtail(C,N_front,N_front+N_buff)
 		TF = TF + DeltaT
 	end do
 	
 	! --- On genere la partie stochastique et on restart avec la nouvelle CI sur C
 	quasi = .True.
-	C_init = 0._dp
-	C_init(N_front:N_front+N_buff) = C(N_front:N_front+N_buff)
-	MStochastique = sum(C_init)
+	C_Inter = 0._dp
+	C_Vac = 0._dp
+	C_Inter(200:250) = C(tab_fe(200,Nv):tab_fe(250,Nv))
+	C_Vac(-150:-100) = C(tab_fe(-150,Nv):tab_fe(-100,Nv))
+	MStoInter = sum(C_Inter)
+	MStoVac = sum(C_Vac)
 
-	M_queue = Mtail(C_init,N_front,N_front+N_buff)
 	if (methode.eq.1) then 
-		Xpart = Multinomial(C_init,N_front,N_front+N_buff,Taille) 
+		XpartInter = Multinomial(C_Inter,200,250,Taille) 
+		XpartVac = Multinomial(C_Vac,-150,-100,Taille) 
 	else 
-		Xpart = Metropolis(C_init,N_0,alpha_m,Taille)
+		print *, "appel 1"
+		XpartInter = Metropolis(C_Inter,N_0,alpha_m,Taille)
+		print *, "appel 2"
+		XpartVac = Metropolis(C_vac,-110._dp,alpha_m,Taille)
+		print *, "appel 3"
 	end if
-	C_init = 0._dp
-	C_init(1:N_front-1) = C(1:N_front-1)
-	M_queue = 0._dp
-	Cvac = C(1)
+	C_Inter = 0._dp
+	C_Vac = 0._dp
+	C_Inter(1:200-1) = C(tab_fe(1,Nv):tab_fe(200-1,Nv))
+	C_Vac(-100+1:-1) = C(tab_fe(-100+1,Nv):tab_fe(-1,Nv))
+	C_Mob(-mv:mi) = C(tab_fe(-mv,Nv):tab_fe(mi,Nv))
 	call FCVREINIT(T, C_init, iatol, reltol, abstol, IER)
 
 	! --- Boucle de couplage
 	do io = 1, 100
 		C_sto = 0._dp
+		C_sto_Inter = 0._dp
+		C_sto_Vac = 0._dp
 
 		if (methode.eq.1) then 
-			call SSA(Xpart,Cvac,DeltaT)
+			call SSA(XpartInter,C_Mob,DeltaT)
+			call SSA(XpartVac,C_Mob,DeltaT)
 		else 
-			call Langevin(Xpart,Cvac,DeltaT) 
+			call Langevin(XpartInter,C_Mob,DeltaT) 
+			call Langevin(XpartVac,C_Mob,DeltaT) 
 		end if
 
 		call fcvode(TF,T,C,itask,IER)
 
-		DeltaT = 500._dp
+		DeltaT = 10._dp
 		TF = TF + DeltaT
 		
-		Cvac = Calcul_Cvac(C,Xpart)
+		C_Mob = Calcul_ConcMob(C,XpartInter,XpartVac,DeltaT/1000._dp,DeltaT)
 		
-		call MPI_REDUCE(Cvac,MPI_Cvac,1,MPI_DOUBLE_PRECISION,MPI_SUM,0, MPI_COMM_WORLD,ierror)
-		MPI_Cvac = MPI_Cvac/real(numproc,8)
-		call MPI_BCAST(MPI_Cvac,1,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierror)
-		Cvac = MPI_Cvac
+		call MPI_REDUCE(C_Mob,MPI_C_Mob,mv+mi+1,MPI_DOUBLE_PRECISION,MPI_SUM,0, MPI_COMM_WORLD,ierror)
+		MPI_C_Mob = MPI_C_Mob/real(numproc,8)
+		call MPI_BCAST(MPI_C_Mob,mv+mi+1,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierror)
+		C_Mob = MPI_C_Mob
 
 
-		C_stotodis = StotoDiscret(Xpart,0)
-		Xpart = Sampling(C,Xpart,0)
+	
+		C_stotodis(1:Nf_Inter+Nb_Inter) = StotoDiscret(XpartInter,1)
+		C_stotodis(Nf_Vac-Nb_Vac:-1) = StotoDiscret(XpartVac,-1)
+		XpartInter = Sampling(C,XpartInter,1)
+		XpartVac = Sampling(C,XpartVac,-1)
 		
-		call MPI_REDUCE(C_stotodis,MPI_C_stotodis,Neq,MPI_DOUBLE_PRECISION,MPI_SUM,0, MPI_COMM_WORLD,ierror)
+		call MPI_REDUCE(C_stotodis,MPI_C_stotodis,1+Nf_Inter+Nb_Inter-Nf_Vac+Nb_Vac,MPI_DOUBLE_PRECISION,MPI_SUM,0, MPI_COMM_WORLD,ierror)
 		MPI_C_stotodis = MPI_C_stotodis/real(numproc,8)
-		call MPI_BCAST(MPI_C_stotodis,Neq,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierror)
+		call MPI_BCAST(MPI_C_stotodis,1+Nf_Inter+Nb_Inter-Nf_Vac+Nb_Vac,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierror)
 		C_stotodis = MPI_C_stotodis
 		
 		C_init = 0._dp
-		C_init(2:N_front-1) = C(2:N_front-1)+C_stotodis(2:N_front-1)
-		C_init(1) = Cvac(1)
-		C_sto(2:N_front-1) = C_init(2:N_front-1)
+		C_init(tab_fe(mi+1,Nv):tab_fe(Nf_Inter-1,Nv)) = C(tab_fe(mi+1,Nv):tab_fe(Nf_Inter-1,Nv)) + C_stotodis(mi+1:Nf_Inter-1)
+		C_init(tab_fe(Nf_Vac+1,Nv):tab_fe(-mv-1,Nv)) = C(tab_fe(Nf_Vac+1,Nv):tab_fe(-mv-1,Nv)) + C_stotodis(Nf_Vac+1:-mv-1)
+		C_init(tab_fe(-mv,Nv):tab_fe(mi,Nv)) = C_Mob(-mv:mi)
+		C_sto(tab_fe(Nf_Vac+1,Nv):tab_fe(Nf_Inter-1,Nv)) = C_init(tab_fe(Nf_Vac+1,Nv):tab_fe(Nf_Inter-1,Nv))
+		
+
 		
 		if (rank.eq.0) then
 			call output(C_sto,T)
@@ -451,7 +483,8 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	deallocate(C_sto)
 	deallocate(C_Inter)
 	deallocate(C_Vac)
-	deallocate(C_mob)
+	deallocate(C_Mob)
+	deallocate(MPI_C_Mob)
 
 	
 call MPI_FINALIZE(ierror)	
