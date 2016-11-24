@@ -7,17 +7,22 @@ implicit none
 real(dp), parameter :: Pi = 3.14159265359
 
 
-!! ------------------------- Parametres d'interface ------------------------- !!
+!! ------------------------- Boundary and model parameters ------------------------- !!
 integer, parameter :: N_front = 200
-integer, parameter :: Nf_Inter = 200
-integer, parameter :: Nf_Vac = -100
 integer, parameter :: N_buff = 50
+
+integer, parameter :: Nf_Inter = 400
 integer, parameter :: Nb_Inter = 50
+
+integer, parameter :: Nf_Vac = 100
 integer, parameter :: Nb_Vac = 50
+
 real(dp) :: M_queue = 0 
 real(dp), dimension(1) :: Cvac
 logical :: quasi 
 integer :: etape, methode, cas_physique, Nmax
+logical :: Coupling_Inter = .False. 
+logical :: Coupling_Vac = .False.
 
 !! --------------------------- Parametres CVODE ----------------------------- !!
 real(dp) :: T, T0, TF
@@ -42,7 +47,7 @@ integer :: Nv, Ni, mv, mi, Nmaxv, Nmaxi
 real(dp), dimension(:,:), allocatable :: Alpha_tab, Beta_tab
 
 !! ----------------------- Parametres stochastiques ------------------------- !!
-integer, parameter :: Taille = 500000
+integer, parameter :: Taille = 100000
 real(dp), dimension(Taille) :: Xpart = 0._dp
 real(dp), dimension(Taille) :: XpartInter = 0._dp
 real(dp), dimension(Taille) :: XpartVac = 0._dp
@@ -304,15 +309,23 @@ end function
 
 
 
+
+function tab_fe(pos,debut)
+	implicit none
+	integer :: tab_fe, pos, debut
+	tab_fe = 1 + debut + pos
+end function
+
+
 function F_fe(x,ConcMob)
 	implicit none
 	real(dp) :: x
 	real(dp) :: F_fe
-	real(dp), dimension(-mv:mi) :: ConcMob
+	real(dp), dimension(:) :: ConcMob
 	F_fe = 0._dp
-	do iloop = -mv, mi
-		rloop = real(iloop,8)
-		F_fe = F_fe + rloop*(beta_nm(x,rloop)*ConcMob(iloop)-alpha_nm(x,rloop)) 
+	do kloop = -mv, mi
+		rloop = real(kloop,8)
+		F_fe = F_fe + rloop*(beta_nm(x,rloop)*ConcMob(tab_fe(kloop,mv))-alpha_nm(x,rloop)) 
 	end do
 end function
 
@@ -320,11 +333,11 @@ function D_fe(x,ConcMob)
 	implicit none
 	real(dp) :: x
 	real(dp) :: D_fe
-	real(dp), dimension(-mv:mi) :: ConcMob
+	real(dp), dimension(:) :: ConcMob
 	D_fe = 0._dp
-	do iloop = -mv, mi
-		rloop = real(iloop,8)
-		D_fe = D_fe + 0.5_dp*rloop*rloop*(beta_nm(x,rloop)*ConcMob(iloop) + alpha_nm(x,rloop))
+	do kloop = -mv, mi
+		rloop = real(kloop,8)
+		D_fe = D_fe + 0.5_dp*rloop*rloop*(beta_nm(x,rloop)*ConcMob(tab_fe(kloop,mv)) + alpha_nm(x,rloop))
 	end do
 end function
 

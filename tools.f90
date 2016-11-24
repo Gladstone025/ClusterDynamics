@@ -9,12 +9,6 @@ contains
 
 
 
-function tab_fe(pos,debut)
-	implicit none
-	integer :: tab_fe, pos, debut
-	tab_fe = 1 + debut + pos
-end function
-
 
 subroutine output(C,T)
 implicit none

@@ -70,23 +70,32 @@ end function
 
 function Calcul_ConcMob(Conc,HInter,HVac,dts,Ts)
 	implicit none
-	integer :: Nconc, Npart, Ks
+	integer :: Nconc, NpartInter, NpartVac, Ks
 	real(dp) :: Cmob1, Cmob2
 	real(dp) :: dts, dts2, Ts
 	real(dp) :: bCmob, aCmob
-	real(dp), dimension(-mv:mi) :: Calcul_ConcMob
+	real(dp), dimension(1:mv+mi+1) :: Calcul_ConcMob
 	real(dp), dimension(:) :: Conc
 	real(dp), dimension(:) :: HInter, Hvac
 	Nconc = size(Conc)
-	Npart = size(HInter)
+	NpartInter = size(HInter)
+	NpartVac = size(Hvac)
 	Ks = int(Ts/dts)
 	dts2 = dts/2.
-	Cmob1 = Conc(1)
-	Cmob2 = Conc(1)
-	bCmob = 0
-	aCmob = 0
 	! A enrichir avec forces de puits et les quelques termes qui manquent dus au amas mobiles
 	do iloop = -mv, mi
+		rloop = real(iloop,8)
+		Cmob1 = Conc(tab_fe(iloop,Nv))
+		Cmob2 = Conc(tab_fe(iloop,Nv))
+		print *, "Cmob initial : ", Cmob1
+		aCmob = 0
+		bCmob = 0
+		if (iloop.eq.-mv) then 
+			aCmob = G_v - Alpha_tab(-1,1)*Conc(tab_fe(-1,Nv)) + 2._dp*Alpha_tab(-2,-1)*Conc(tab_fe(-2,Nv))
+		else if (iloop.eq.mi) then
+			aCmob = G_i + 2._dp*Alpha_tab(2,1)*Conc(tab_fe(2,Nv)) - Alpha_tab(1,-1)*Conc(tab_fe(1,Nv)) 
+		end if
+		print *, "aCmob : ", aCmob
 		do jloop = max(-Nv-iloop,-Nv), -2
 			aCmob = aCmob + Alpha_tab(jloop+iloop,iloop)*Conc(tab_fe(jloop+iloop,Nv))
 			bCmob = bCmob + Beta_tab(jloop,iloop)*Conc(tab_fe(jloop,Nv))
@@ -95,23 +104,37 @@ function Calcul_ConcMob(Conc,HInter,HVac,dts,Ts)
 			aCmob = aCmob + Alpha_tab(jloop+iloop,iloop)*Conc(tab_fe(jloop+iloop,Nv))
 			bCmob = bCmob + Beta_tab(jloop,iloop)*Conc(tab_fe(jloop,Nv))
 		enddo
-		do jloop = 1, Npart
-			bCmob = bCmob + MStoInter/Npart*beta(HInter(jloop))
-			bCmob = bCmob + MStoVac/Npart*beta(HVac(jloop))			
-			aCmob = aCmob + MStoInter/Npart*alpha(HInter(jloop))
-			aCmob = aCmob + MStoVac/Npart*alpha(HVac(jloop))
-		enddo
+		if (Coupling_Inter) then
+			print *, "ConcMob inter"
+			do jloop = 1, NpartInter
+				aCmob = aCmob + MStoInter/NpartInter*alpha_nm(HInter(jloop),rloop)
+				bCmob = bCmob + MStoInter/NpartInter*beta_nm(HInter(jloop),rloop)
+			enddo
+		end if
+		if (Coupling_Vac) then
+			print *, "ConcMob vac"
+			do jloop = 1, NpartVac
+				aCmob = aCmob + MStoVac/NpartVac*alpha_nm(HVac(jloop),rloop)
+				bCmob = bCmob + MStoVac/NpartVac*beta_nm(HVac(jloop),rloop)			
+			enddo
+		end if
+		print *, "aCmob : ", aCmob
+		print *, "bCmob : ", bCmob
 		do kloop = 1, Ks
 			Cmob1 = (Cmob2 - aCmob/bCmob)*exp(-bCmob*dts2) + aCmob/bCmob
 			Cmob2 = Cmob1/(1.+2.*Beta_tab(iloop,iloop)*dts*Cmob1)
 			Cmob1 = (Cmob2 - aCmob/bCmob)*exp(-bCmob*dts2) + aCmob/bCmob
 		enddo
-		Calcul_ConcMob(iloop) = Cmob1
+		if (iloop.eq.0) then
+			Cmob1 = 0._dp
+		end if
+		Calcul_ConcMob(tab_fe(iloop,mv)) = Cmob1
+		print *, "Cmob final : ", Cmob1
 	end do
 end function
 
 
-
+! revoir toutes les boucles
 subroutine Langevin(HLangevin,ConcMob,Tfinal)
 	implicit none
 	integer :: K
@@ -131,6 +154,7 @@ subroutine Langevin(HLangevin,ConcMob,Tfinal)
 		end do
 	else if (cas_physique.eq.2) then
 		do iloop = 1, K
+			print *, iloop
 			do jloop = 1, size(HLangevin)
 				call gen_rand_normal(G,1)
 				HLangevin(jloop) = HLangevin(jloop) + dt_sto*(F_fe(HLangevin(jloop),ConcMob)) + &
@@ -199,7 +223,7 @@ subroutine SSA(HLangevin,ConcMob,Tfinal)
 		enddo
 		deallocate(p)
 	else if (cas_physique.eq.2) then
-		allocate(p(mv+mi+1))
+		allocate(p(-mv:mi))
 		do iloop = 1, Npart
 			dte = 0.d0
 			do while (dte < Tfinal)
@@ -207,7 +231,7 @@ subroutine SSA(HLangevin,ConcMob,Tfinal)
 				nue = 0._dp
 				do jloop = -mv, mi
 					rloop = real(jloop,8)
-					nue = nue + beta_nm(pos,rloop)*ConcMob(jloop)+alpha_nm(pos,rloop)
+					nue = nue + beta_nm(pos,rloop)*ConcMob(tab_fe(jloop,mv))+alpha_nm(pos,rloop)
 				end do
 				call tirage_exp(expe,nue)
 				dte = dte + expe
@@ -215,14 +239,14 @@ subroutine SSA(HLangevin,ConcMob,Tfinal)
 					! Pour les probas, on fait gaffe : beta_(n,i/v)C_i/v + alpha_(n,v/i) 
 					! Penser a computer Alpha_tab et Beta_tab sur -max(mv,mi),max(mv,mi) avec zero pour les inexistants
 					do jloop = -mv, mi
-						p(jloop) = (beta_nm(pos,rloop)*ConcMob(jloop)+alpha_nm(pos,-rloop))/nue
+						p(jloop) = (beta_nm(pos,rloop)*ConcMob(tab_fe(jloop,mv))+alpha_nm(pos,-rloop))/nue
 					end do
 					call random_number(u)
 					s = 0
 					do jloop = -mv, mi
 						s = s + p(jloop)
 						if (s > u) then 
-							HLangevin(jloop) = HLangevin(jloop) + real(jloop,8)
+							HLangevin(iloop) = HLangevin(iloop) + real(jloop,8)
 							exit
 						endif
 					end do
@@ -272,7 +296,7 @@ function Inboundary(x,InterVac,a)
 		end if
 	! - Cas lacunes
 	case(-1)
-		if (x > Nf_Vac-a) then
+		if (x > -Nf_Vac-a) then
 			Inboundary = .True.
 		end if
 	! - Cas Interstitiel
@@ -290,7 +314,6 @@ function StotoDiscret(HLangevin,InterVac)
 	real(dp), dimension(:) :: HLangevin
 	real(dp), dimension(:), allocatable :: Conc, StotoDiscret
 	integer :: Npart, n, ninf
-	Conc = 0._dp
 	ninf = 0
 	Npart = size(HLangevin)
 	! Penser a ecrire une fonction du type "Inboundary" qui renvoit un booleen
@@ -302,9 +325,10 @@ function StotoDiscret(HLangevin,InterVac)
 		allocate(Conc(1:Nf_Inter+Nb_Inter))
 		allocate(StotoDiscret(1:Nf_Inter+Nb_Inter))
 	case(-1)
-		allocate(Conc(Nf_Vac-Nb_Vac:-1))
-		allocate(StotoDiscret(Nf_Vac-Nb_Vac:-1))
+		allocate(Conc(-Nf_Vac-Nb_Vac:-1))
+		allocate(StotoDiscret(1:Nf_Vac+Nb_Vac))
 	end select
+	Conc = 0._dp
 	do iloop = 1, Npart
 		if (Inboundary(HLangevin(iloop),InterVac,2._dp)) then
 			n = nint(HLangevin(iloop))
@@ -321,18 +345,20 @@ function StotoDiscret(HLangevin,InterVac)
 		Conc(N_front:N_front+N_buff) = 0._dp
 		Conc = MDiscret*Conc/sum(Conc)
 		MStochastique = MStochastique - MDiscret
+		StotoDiscret = Conc
 	else if (InterVac.eq.1) then
 		MDisInter = MStoInter*(real(ninf,8)/real(Npart,8))
-		Conc(N_front:N_front+N_buff) = 0._dp
+		Conc(Nf_Inter:Nf_Inter+Nb_Inter) = 0._dp
 		Conc = MDisInter*Conc/sum(Conc)
 		MStoInter = MStoInter - MDisInter
+		StotoDiscret = Conc
 	else if (InterVac.eq.(-1)) then
 		MDisVac = MStoVac*(real(ninf,8)/real(Npart,8))
-		Conc(N_front:N_front+N_buff) = 0._dp
+		Conc(-Nf_Vac-Nb_Vac:-Nf_Vac) = 0._dp
 		Conc = MDisVac*Conc/sum(Conc)
 		MStoVac = MStoVac - MDisVac
+		StotoDiscret(1:Nf_Vac+Nb_Vac) = Conc(-1:-Nf_Vac-Nb_Vac:-1)
 	end if
-	StotoDiscret = Conc
 end function
 
 
@@ -368,15 +394,18 @@ function Sampling(Conc,HLangevin,InterVac)
 		Conc_buff = 0._dp
 		Conc_buff(Nf_Inter:Nf_Inter+Nb_Inter) = Conc(Nf_Inter:Nf_Inter+Nb_Inter)
 		Npart = size(HLangevin)
+		print *, Npart
 		Mconc = sum(Conc(Nf_Inter:Nf_Inter+Nb_Inter))
+		print *, Mconc, MStoInter
 		Nconc = int(Mconc*Npart/MStoInter)
+		print *, Nconc
 		MStoInter = MStoInter + Mconc	
 	else if (InterVac.eq.(-1)) then
-		allocate(Conc_buff(-Nv:-1))
+		allocate(Conc_buff(1:Nv))
 		Conc_buff = 0._dp
-		Conc_buff(Nf_Vac-Nb_Vac:Nf_Vac) = Conc(Nf_Vac-Nb_Vac:Nf_Vac)
+		Conc_buff(Nf_Vac:Nf_Vac+Nb_Vac) = Conc(tab_fe(-Nf_Vac,Nv):tab_fe(-Nb_Vac-Nf_Vac,Nv):-1)
 		Npart = size(HLangevin)
-		Mconc = sum(Conc(Nf_Vac-Nb_Vac:Nf_Vac))
+		Mconc = sum(Conc(Nf_Vac:Nf_Vac+Nf_Vac))
 		Nconc = int(Mconc*Npart/MStoVac)
 		MStoVac = MStoVac + Mconc		
 	end if
@@ -388,7 +417,7 @@ function Sampling(Conc,HLangevin,InterVac)
 		case(1)
 			Hsto = Multinomial(Conc_buff,Nf_Inter,Nf_Inter+Nb_Inter,Nconc)
 		case(-1)
-			Hsto = Multinomial(Conc_buff,Nf_Vac-Nb_Vac,Nf_Vac,Nconc)
+			Hsto = -1._dp*Multinomial(Conc_buff,Nf_Vac-Nb_Vac,Nf_Vac,Nconc)
 		end select
 	else 
 		select case (InterVac)
@@ -397,9 +426,10 @@ function Sampling(Conc,HLangevin,InterVac)
 		case(1)
 			Hsto = Metropolis(Conc_buff,real(Nf_Inter+Nb_Inter/5._dp,8),real(Nb_Inter/10._dp,8),Nconc)
 		case(-1)
-			Hsto = Metropolis(Conc_buff,real(Nf_Vac-Nb_Vac/5._dp,8),real(Nb_Vac/10._dp,8),Nconc)
+			Hsto = -1._dp*Metropolis(Conc_buff,real(Nf_Vac+Nb_Vac/5._dp,8),real(Nb_Vac/10._dp,8),Nconc)
 		end select
 	end if
+	print *, Npart+Nconc
 	allocate(Htot(Npart+Nconc))
 	Htot(1:Npart) = HLangevin(1:Npart)
 	Htot(Npart+1:Npart+Nconc) = Hsto(1:Nconc)
@@ -467,10 +497,8 @@ function Sampling(Conc,HLangevin,InterVac)
 	endif
 	if (InterVac.eq.0) then
 		C_sto = MStochastique*C_sto/sum(C_sto)
-	else if (InterVac.eq.1) then
-		C_sto = MStoInter*C_sto/sum(C_sto)	
-	else if (InterVac.eq.(-1)) then
-		C_sto = MStoVac*C_sto/sum(C_sto)			
+	else 
+		C_sto = C_sto/sum(C_sto)			
 	end if
 	deallocate(Hsto)
 	deallocate(Htot)
