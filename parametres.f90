@@ -17,6 +17,8 @@ integer, parameter :: Nb_Inter = 50
 integer, parameter :: Nf_Vac = 100
 integer, parameter :: Nb_Vac = 50
 
+real(dp), parameter :: R_min = -1.e10
+
 real(dp) :: M_queue = 0 
 real(dp), dimension(1) :: Cvac
 logical :: quasi 
@@ -25,7 +27,7 @@ logical :: Coupling_Inter = .False.
 logical :: Coupling_Vac = .False.
 
 !! --------------------------- Parametres CVODE ----------------------------- !!
-real(dp) :: T, T0, TF
+real(dp) :: T, T0, TF, DeltaT
 integer(c_int) :: IER
 real(dp), dimension(:), allocatable :: C, C_init, C_stotodis
 real(dp), dimension(:), allocatable :: C_Inter, C_Vac, C_Mob
@@ -47,11 +49,14 @@ integer :: Nv, Ni, mv, mi, Nmaxv, Nmaxi
 real(dp), dimension(:,:), allocatable :: Alpha_tab, Beta_tab
 
 !! ----------------------- Parametres stochastiques ------------------------- !!
-integer, parameter :: Taille = 100000
+integer, parameter :: Taille = 1000000
 real(dp), dimension(Taille) :: Xpart = 0._dp
 real(dp), dimension(Taille) :: XpartInter = 0._dp
 real(dp), dimension(Taille) :: XpartVac = 0._dp
-real(dp), dimension(:), allocatable :: C_sto, C_sto_Inter, C_sto_Vac
+real(dp), dimension(:), allocatable :: C_sto
+
+real(dp) :: bCnCi_sto, aCi_sto, Si_sto
+real(dp) :: bCnCv_sto, aCv_sto, Sv_sto
 
 real(dp) :: N_0 = real(N_front+N_buff/5._dp,8)
 real(dp) :: alpha_m = real(N_buff/10._dp,8)

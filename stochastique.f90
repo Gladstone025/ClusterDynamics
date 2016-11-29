@@ -73,7 +73,7 @@ function Calcul_ConcMob(Conc,HInter,HVac,dts,Ts)
 	integer :: Nconc, NpartInter, NpartVac, Ks
 	real(dp) :: Cmob1, Cmob2
 	real(dp) :: dts, dts2, Ts
-	real(dp) :: bCmob, aCmob
+	real(dp) :: bCmob, aCmob, Si, Sv
 	real(dp), dimension(1:mv+mi+1) :: Calcul_ConcMob
 	real(dp), dimension(:) :: Conc
 	real(dp), dimension(:) :: HInter, Hvac
@@ -87,39 +87,48 @@ function Calcul_ConcMob(Conc,HInter,HVac,dts,Ts)
 		rloop = real(iloop,8)
 		Cmob1 = Conc(tab_fe(iloop,Nv))
 		Cmob2 = Conc(tab_fe(iloop,Nv))
-		print *, "Cmob initial : ", Cmob1
-		aCmob = 0
-		bCmob = 0
+		aCmob = 0._dp
+		bCmob = 0._dp
+		Si = 0._dp
+		Sv = 0._dp
 		if (iloop.eq.-mv) then 
 			aCmob = G_v - Alpha_tab(-1,1)*Conc(tab_fe(-1,Nv)) + 2._dp*Alpha_tab(-2,-1)*Conc(tab_fe(-2,Nv))
 		else if (iloop.eq.mi) then
 			aCmob = G_i + 2._dp*Alpha_tab(2,1)*Conc(tab_fe(2,Nv)) - Alpha_tab(1,-1)*Conc(tab_fe(1,Nv)) 
 		end if
-		print *, "aCmob : ", aCmob
 		do jloop = max(-Nv-iloop,-Nv), -2
 			aCmob = aCmob + Alpha_tab(jloop+iloop,iloop)*Conc(tab_fe(jloop+iloop,Nv))
 			bCmob = bCmob + Beta_tab(jloop,iloop)*Conc(tab_fe(jloop,Nv))
+			Si = Si + Beta_tab(jloop,1)*Conc(tab_fe(jloop,Nv))
+			Sv = Sv + Beta_tab(jloop,-1)*Conc(tab_fe(jloop,Nv))
 		enddo
 		do jloop = 2, min(Ni-iloop,Ni) 
 			aCmob = aCmob + Alpha_tab(jloop+iloop,iloop)*Conc(tab_fe(jloop+iloop,Nv))
 			bCmob = bCmob + Beta_tab(jloop,iloop)*Conc(tab_fe(jloop,Nv))
+			Si = Si + Beta_tab(jloop,1)*Conc(tab_fe(jloop,Nv))
+			Sv = Sv + Beta_tab(jloop,-1)*Conc(tab_fe(jloop,Nv))
 		enddo
 		if (Coupling_Inter) then
-			print *, "ConcMob inter"
 			do jloop = 1, NpartInter
 				aCmob = aCmob + MStoInter/NpartInter*alpha_nm(HInter(jloop),rloop)
 				bCmob = bCmob + MStoInter/NpartInter*beta_nm(HInter(jloop),rloop)
+				Si = Si + MStoInter/NpartInter*beta_nm(HInter(jloop),1._dp)
+				Sv = Sv + MStoInter/NpartInter*beta_nm(HInter(jloop),-1._dp)
 			enddo
 		end if
 		if (Coupling_Vac) then
-			print *, "ConcMob vac"
 			do jloop = 1, NpartVac
 				aCmob = aCmob + MStoVac/NpartVac*alpha_nm(HVac(jloop),rloop)
-				bCmob = bCmob + MStoVac/NpartVac*beta_nm(HVac(jloop),rloop)			
+				bCmob = bCmob + MStoVac/NpartVac*beta_nm(HVac(jloop),rloop)	
+				Si = Si + MStoInter/NpartInter*beta_nm(HInter(jloop),1._dp)
+				Sv = Sv + MStoInter/NpartInter*beta_nm(HInter(jloop),-1._dp)		
 			enddo
 		end if
-		print *, "aCmob : ", aCmob
-		print *, "bCmob : ", bCmob
+		if (iloop.eq.-mv) then 
+			aCmob = aCmob - Z_v*rho_d*D_v*(Cmob1-Cv_eq) - 6._dp/l_gb*sqrt(Z_v*rho_d+Sv/D_v)*D_v*(Cmob1-Cv_eq)
+		else if (iloop.eq.mi) then
+			aCmob = aCmob - Z_i*rho_d*D_i*(Cmob1-Ci_eq) - 6._dp/l_gb*sqrt(Z_i*rho_d+Si/D_i)*D_i*(Cmob1-Ci_eq)
+		end if
 		do kloop = 1, Ks
 			Cmob1 = (Cmob2 - aCmob/bCmob)*exp(-bCmob*dts2) + aCmob/bCmob
 			Cmob2 = Cmob1/(1.+2.*Beta_tab(iloop,iloop)*dts*Cmob1)
@@ -129,7 +138,6 @@ function Calcul_ConcMob(Conc,HInter,HVac,dts,Ts)
 			Cmob1 = 0._dp
 		end if
 		Calcul_ConcMob(tab_fe(iloop,mv)) = Cmob1
-		print *, "Cmob final : ", Cmob1
 	end do
 end function
 
@@ -343,19 +351,25 @@ function StotoDiscret(HLangevin,InterVac)
 	if (InterVac.eq.0) then
 		MDiscret = MStochastique*(real(ninf,8)/real(Npart,8))
 		Conc(N_front:N_front+N_buff) = 0._dp
-		Conc = MDiscret*Conc/sum(Conc)
+		if (sum(Conc) > 0._dp) then
+			Conc = MDiscret*Conc/sum(Conc)
+		end if
 		MStochastique = MStochastique - MDiscret
 		StotoDiscret = Conc
 	else if (InterVac.eq.1) then
 		MDisInter = MStoInter*(real(ninf,8)/real(Npart,8))
 		Conc(Nf_Inter:Nf_Inter+Nb_Inter) = 0._dp
-		Conc = MDisInter*Conc/sum(Conc)
+		if (sum(Conc) > 0._dp) then
+			Conc = MDisInter*Conc/sum(Conc)
+		end if
 		MStoInter = MStoInter - MDisInter
 		StotoDiscret = Conc
 	else if (InterVac.eq.(-1)) then
 		MDisVac = MStoVac*(real(ninf,8)/real(Npart,8))
 		Conc(-Nf_Vac-Nb_Vac:-Nf_Vac) = 0._dp
-		Conc = MDisVac*Conc/sum(Conc)
+		if (sum(Conc) > 0._dp) then
+			Conc = MDisVac*Conc/sum(Conc)
+		end if
 		MStoVac = MStoVac - MDisVac
 		StotoDiscret(1:Nf_Vac+Nb_Vac) = Conc(-1:-Nf_Vac-Nb_Vac:-1)
 	end if
@@ -392,10 +406,10 @@ function Sampling(Conc,HLangevin,InterVac)
 	else if (InterVac.eq.1) then
 		allocate(Conc_buff(1:Ni))
 		Conc_buff = 0._dp
-		Conc_buff(Nf_Inter:Nf_Inter+Nb_Inter) = Conc(Nf_Inter:Nf_Inter+Nb_Inter)
+		Conc_buff(Nf_Inter:Nf_Inter+Nb_Inter) = Conc(tab_fe(Nf_Inter,Nv):tab_fe(Nf_Inter+Nb_Inter,Nv))
 		Npart = size(HLangevin)
 		print *, Npart
-		Mconc = sum(Conc(Nf_Inter:Nf_Inter+Nb_Inter))
+		Mconc = sum(Conc_buff(Nf_Inter:Nf_Inter+Nb_Inter))
 		print *, Mconc, MStoInter
 		Nconc = int(Mconc*Npart/MStoInter)
 		print *, Nconc
@@ -405,9 +419,16 @@ function Sampling(Conc,HLangevin,InterVac)
 		Conc_buff = 0._dp
 		Conc_buff(Nf_Vac:Nf_Vac+Nb_Vac) = Conc(tab_fe(-Nf_Vac,Nv):tab_fe(-Nb_Vac-Nf_Vac,Nv):-1)
 		Npart = size(HLangevin)
-		Mconc = sum(Conc(Nf_Vac:Nf_Vac+Nf_Vac))
+		print *, Npart
+		Mconc = sum(Conc_buff(Nf_Vac:Nf_Vac+Nb_Vac))
+		print *, Mconc, MStoVac
 		Nconc = int(Mconc*Npart/MStoVac)
+		print *, Nconc
 		MStoVac = MStoVac + Mconc		
+	end if
+	if (Nconc > 10*Npart) then
+		DeltaT  = DeltaT/4._dp
+		dt_sto = dt_sto/4._dp
 	end if
 	allocate(Hsto(Nconc))
 	if (methode.eq.1) then
@@ -441,6 +462,9 @@ function Sampling(Conc,HLangevin,InterVac)
 		endif
 	end do
 	Ndiff = Nconc - Ninf
+	print *, "Ninf : ", Ninf, " / Nconc : ", Nconc
+	print *, Inboundary(Htot(1),InterVac,0._dp), Inboundary(Htot(Npart+Nconc-10),InterVac,0._dp), Htot(1), Htot(Npart+Nconc-10)
+	print *, InterVac, " / Ndiff : ", Ndiff
 	! -- Puis on gere le resampling en fonction de Ndiff
 	if (Ndiff < 0) then ! -- il faudra dupliquer des particules
 	print *, "DUPLICATION"
@@ -466,6 +490,7 @@ function Sampling(Conc,HLangevin,InterVac)
 	else ! -- il faut supprimer des particules
 	print *, "SUPPRESSION"
 		allocate(Sampling_inter(Npart+Ndiff))
+		Sampling_inter = 0._dp
 		compt = 0
 		do iloop = 1, Npart+Nconc
 			if (.not.Inboundary(Htot(iloop),InterVac,0._dp)) then
@@ -477,14 +502,14 @@ function Sampling(Conc,HLangevin,InterVac)
 		do while (compt < Ndiff)
 			call random_number(u)
 			nn = int(u*(Npart+Ndiff))+1
-			if (Sampling_inter(nn) > 0) then
-				Sampling_inter(nn) = -1.
+			if (Sampling_inter(nn) > R_min) then
+				Sampling_inter(nn) = R_min
 				compt = compt+1
 			end if
 		end do
 		compt = 0
 		do iloop = 1, Npart+Ndiff
-			if (Sampling_inter(iloop) > 0) then
+			if (Sampling_inter(iloop) > R_min) then
 				compt = compt + 1
 				Sampling(compt) = Sampling_inter(iloop)
 				nsto = nint(Sampling_inter(iloop))
@@ -497,8 +522,10 @@ function Sampling(Conc,HLangevin,InterVac)
 	endif
 	if (InterVac.eq.0) then
 		C_sto = MStochastique*C_sto/sum(C_sto)
-	else 
-		C_sto = C_sto/sum(C_sto)			
+	else if (InterVac.eq.1) then
+		C_sto(1:1200) = C_sto(1:1200)/sum(C_sto(1:1200))
+	else if (InterVac.eq.(-1)) then
+		C_sto(-1200:-1) = C_sto(-1200:-1)/sum(C_sto(-1200:-1))			
 	end if
 	deallocate(Hsto)
 	deallocate(Htot)

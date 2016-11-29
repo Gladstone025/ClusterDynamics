@@ -75,8 +75,67 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 									&Beta_tab(-Nv+1,-1)*Conc(tab_fe(-Nv+1,Nv))*Concvac - Alpha_tab(-Nv,-1)*Conc(tab_fe(-Nv,Nv)) - &
 									&Beta_tab(-Nv,-1)*Conc(tab_fe(-Nv,Nv))*Concvac
 		if (quasi) then
-			ConcP(tab_fe(1,Nv)) = 0
-			ConcP(tab_fe(-1,Nv)) = 0
+			! somme sur les amas immobiles
+			do iloop = 2, Ni - 1
+				bCnCi = bCnCi - Beta_tab(iloop,1)*Conc(tab_fe(iloop,Nv))*Concinter
+				bCnCv = bCnCv - Beta_tab(iloop,-1)*Conc(tab_fe(iloop,Nv))*Concvac
+				aCi = aCi + Alpha_tab(iloop+1,1)*Conc(tab_fe(iloop+1,Nv))
+				aCv = aCv + Alpha_tab(iloop-1,-1)*Conc(tab_fe(iloop-1,Nv))
+				Si = Si + Beta_tab(iloop,1)*Conc(tab_fe(iloop,Nv))
+				Sv = Sv + Beta_tab(iloop,-1)*Conc(tab_fe(iloop,Nv))
+			enddo
+			do iloop = -Nv + 2, -2 
+				bCnCi = bCnCi - Beta_tab(iloop,1)*Conc(tab_fe(iloop,Nv))*Concinter
+				bCnCv = bCnCv - Beta_tab(iloop,-1)*Conc(tab_fe(iloop,Nv))*Concvac
+				aCi = aCi + Alpha_tab(iloop+1,1)*Conc(tab_fe(iloop+1,Nv))
+				aCv = aCv + Alpha_tab(iloop-1,-1)*Conc(tab_fe(iloop-1,Nv))
+				Si = Si + Beta_tab(iloop,1)*Conc(tab_fe(iloop,Nv))
+				Sv = Sv + Beta_tab(iloop,-1)*Conc(tab_fe(iloop,Nv))
+			enddo
+			! Somme sur les amas stochastiques
+			!if (Coupling_Inter) then
+			!	print *, "FCVfun Coupling Inter"
+			!	do iloop = 1, Taille
+			!		bCnCi = bCnCi - MStoInter/Taille*beta_nm(XpartInter(iloop),1._dp)*Concinter
+			!		bCnCv = bCnCv - MStoInter/Taille*beta_nm(XpartInter(iloop),-1._dp)*Concvac
+			!		aCi = aCi + MStoInter/Taille*alpha_nm(XpartInter(iloop)+1._dp,1._dp)
+			!		aCv = aCv + MStoInter/Taille*alpha_nm(XpartInter(iloop)-1._dp,-1._dp)
+			!		Si = Si + MStoInter/Taille*beta_nm(XpartInter(iloop),1._dp)
+			!		Sv = Sv + MStoInter/Taille*beta_nm(XpartInter(iloop),-1._dp)
+			!	enddo
+			!end if
+			!if (Coupling_Vac) then
+			!	do iloop = 1, Taille
+			!		bCnCi = bCnCi - MStoVac/Taille*beta_nm(XpartVac(iloop),1._dp)*Concinter
+			!		bCnCv = bCnCv - MStoVac/Taille*beta_nm(XpartVac(iloop),-1._dp)*Concvac
+			!		aCi = aCi + MStoVac/Taille*alpha_nm(XpartVac(iloop)+1._dp,1._dp)
+			!		aCv = aCv + MStoVac/Taille*alpha_nm(XpartVac(iloop)-1._dp,-1._dp)
+			!		Si = Si + MStoVac/Taille*beta_nm(XpartVac(iloop),1._dp)
+			!		Sv = Sv + MStoVac/Taille*beta_nm(XpartVac(iloop),-1._dp)
+			!	enddo
+			!end if
+			! contribution amas mobiles
+			bCnCi = bCnCi - 2._dp*Beta_tab(1,1)*Conc(tab_fe(1,Nv))*Conc(tab_fe(1,Nv)) - Beta_tab(-1,1)*Conc(tab_fe(-1,Nv))*Concinter + &
+					&Beta_tab(2,-1)*Conc(tab_fe(2,Nv))*Conc(tab_fe(-1,Nv)) - Beta_tab(1,-1)*Conc(tab_fe(1,Nv))*Conc(tab_fe(-1,Nv))
+			aCi = aCi + 2._dp*Alpha_tab(2,1)*Conc(tab_fe(2,Nv)) - Alpha_tab(1,-1)*Conc(tab_fe(1,Nv)) 
+			bCnCv = bCnCv - 2._dp*Beta_tab(-1,-1)*Conc(tab_fe(-1,Nv))*Conc(tab_fe(-1,Nv)) - Beta_tab(1,-1)*Conc(tab_fe(1,Nv))*Concvac + &
+					&Beta_tab(-2,1)*Conc(tab_fe(-2,Nv))*Conc(tab_fe(1,Nv)) - Beta_tab(-1,1)*Conc(tab_fe(-1,Nv))*Conc(tab_fe(1,Nv))
+			aCv = aCv - Alpha_tab(-1,1)*Conc(tab_fe(-1,Nv)) + 2._dp*Alpha_tab(-2,-1)*Conc(tab_fe(-2,Nv))
+			Si = Si + Beta_tab(-1,1)*(Conc(tab_fe(-1,Nv))+Conc(tab_fe(1,Nv)))
+			Sv = Sv + Beta_tab(1,-1)*(Conc(tab_fe(1,Nv))+Conc(tab_fe(-1,Nv)))
+			! contribution totale
+			bCnCi = bCnCi + bCnCi_sto
+			bCnCv = bCnCv + bCnCv_sto
+			aCi = aCi + aCi_sto
+			aCv = aCv + aCv_sto
+			Si = Si + Si_sto
+			Sv = Sv + Sv_sto			
+			ConcP(tab_fe(1,Nv)) = G_i + bCnCi + aCi - Z_i*rho_d*D_i*(Concinter-Ci_eq) - &
+										&6._dp/l_gb*sqrt(Z_i*rho_d+Si/D_i)*D_i*(Concinter-Ci_eq)
+			ConcP(tab_fe(-1,Nv)) = G_v + bCnCv + aCv - Z_v*rho_d*D_v*(Concvac-Cv_eq) - &
+										&6._dp/l_gb*sqrt(Z_v*rho_d+Sv/D_v)*D_v*(Concvac-Cv_eq)
+			!ConcP(tab_fe(1,Nv)) = 0
+			!ConcP(tab_fe(-1,Nv)) = 0
 		else
 			! somme sur les amas immobiles
 			do iloop = 2, Ni - 1
@@ -118,3 +177,5 @@ end subroutine
 
 
 end module fonctioncvode
+
+

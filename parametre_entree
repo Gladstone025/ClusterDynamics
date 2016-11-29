@@ -1,6 +1,6 @@
 &PARAMETER
 etape = 4,
-dt_sto = 1.
+dt_sto = 0.1
 methode = 2
 cas_physique = 2
 &end

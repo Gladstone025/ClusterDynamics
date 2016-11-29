@@ -11,8 +11,7 @@ use mpi
 implicit none
 
 integer :: io
-real(dp) :: DeltaT = 10._dp
-real(dp) :: Mtemp
+real(dp) :: Mtemp, nue
 
 namelist /parameter/etape,dt_sto,methode,cas_physique
 
@@ -109,6 +108,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	T = 0._dp
 	T0 = 0._dp
 	TF = 100._dp
+	DeltaT = 10._dp
 	abstol = 1e-18_dp
 	reltol = 1e-5_dp
 	C_init(1) = Cq
@@ -224,11 +224,11 @@ call MPI_FINALIZE(ierror)
 
 case(3)
 
-	Ni = 5000
-	Nv = 1000
+	Ni = 1100
+	Nv = 300
 	Neq = 1 + Ni + Nv
-	Nmaxi = 5000
-	Nmaxv = 1000
+	Nmaxi = 1100
+	Nmaxv = 300
 	mv = 1
 	mi = 1
 	! Allocation des principaux tableaux
@@ -331,9 +331,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	allocate(C_init(Neq))
 	allocate(C_stotodis(-Nv:Ni))
 	allocate(MPI_C_stotodis(-Nv:Ni))
-	allocate(C_sto(-1200:1200))
-	allocate(C_sto_Inter(1200))
-	allocate(C_sto_Vac(1200))
+	allocate(C_sto(-2000:2000))
 	allocate(C_Inter(1:Ni))
 	allocate(C_Vac(1:Nv))
 	allocate(C_Mob(-mv:mi))
@@ -349,8 +347,17 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 		end do 
 	end do
 	
-	do iloop = -20,20
-			print *, Alpha_tab(iloop,-1), Alpha_tab(iloop,1), Beta_tab(iloop,-1), Beta_tab(iloop,1)
+	C_Mob(-1) = 2.10e20
+	C_Mob(0) = 0._dp
+	C_Mob(1) = 1.04e16
+	nue = 0._dp
+	do iloop = -100, 100
+		do jloop = -mv, mi
+			rloop = real(jloop,8)
+			nue = nue + beta_nm(real(iloop,8),rloop)*C_Mob(jloop)+alpha_nm(real(iloop,8),rloop)
+		end do
+		print *, iloop, 1._dp/nue
+		nue = 0._dp
 	end do
 	
 	call fnvinits(isolver,Neq,IER)
@@ -397,7 +404,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	print *, "Boucle deterministe"
 	! --- On propage en full EDO jusqu'au critere d'arret
 	quasi = .False.
-	do while ((C(tab_fe(Nf_Inter,Nv)) < 1.e3) .and. (C(tab_fe(-Nf_Vac,Nv)) < 1.e7))
+	do while ((C(tab_fe(Nf_Inter,Nv)) < 1.e3) .and. (C(tab_fe(-Nf_Vac,Nv)) < 1.e10))
 		call fcvode(TF,T,C,itask,IER)
 		call output(C,T)
 		TF = TF + DeltaT
@@ -406,7 +413,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 		print *, "INTERSTITIELS"
 		Coupling_Inter = .True.
 	end if
-	if (C(tab_fe(-Nf_Vac,Nv)) > 1.e7) then
+	if (C(tab_fe(-Nf_Vac,Nv)) > 1.e10) then
 		Coupling_Vac = .True.
 		print *, "LACUNES"
 	end if
@@ -416,6 +423,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	
 	print *, "Initialisation boucle stochastique"
 	quasi = .True.
+
 	
 	if (Coupling_Inter) then
 		C_Inter = 0._dp
@@ -428,6 +436,8 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 			alpha_m = real(Nb_Inter/10._dp,8)
 			XpartInter = Metropolis(C_Inter,N_0,alpha_m,Taille)
 		end if
+		DeltaT = 0.1_dp
+		TF = T+DeltaT
 	end if
 	if (Coupling_Vac) then		
 		C_Vac = 0._dp
@@ -440,6 +450,8 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 			alpha_m = real(Nb_Vac/10._dp,8)
 			XpartVac = -1._dp*Metropolis(C_vac,N_0,alpha_m,Taille)
 		end if
+		DeltaT = 0.1_dp
+		TF = T+DeltaT
 	end if
 	
 	C_init = 0._dp
@@ -449,11 +461,10 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	
 	call FCVREINIT(T, C_init, iatol, reltol, abstol, IER)
 
-	DeltaT = 100._dp
 	print *, "Initialisation boucle stochastique : ok"
 	
 	! --- Boucle de couplage
-	do io = 1, 100
+	do io = 1, 200
 		C_sto = 0._dp
 		
 		print *, "Calcul Langevin"
@@ -473,15 +484,51 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 		end if
 		print *, "Calcul Langevin : ok"
 
+
+
+
 		print *, "Calcul deterministe"
+		
+		! Somme sur les amas stochastiques
+		if (Coupling_Inter) then
+			bCnCi_sto = 0._dp
+			bCnCv_sto = 0._dp
+			aCi_sto = 0._dp
+			aCv_sto = 0._dp
+			Si_sto = 0._dp
+			Sv_sto = 0._dp
+			print *, "FCVfun Coupling Inter"
+			do iloop = 1, Taille
+				bCnCi_sto = bCnCi_sto - MStoInter/Taille*beta_nm(XpartInter(iloop),1._dp)*C(tab_fe(1,Nv))
+				bCnCv_sto = bCnCv_sto - MStoInter/Taille*beta_nm(XpartInter(iloop),-1._dp)*C(tab_fe(-1,Nv))
+				aCi_sto = aCi_sto + MStoInter/Taille*alpha_nm(XpartInter(iloop)+1._dp,1._dp)
+				aCv_sto = aCv_sto + MStoInter/Taille*alpha_nm(XpartInter(iloop)-1._dp,-1._dp)
+				Si_sto = Si_sto + MStoInter/Taille*beta_nm(XpartInter(iloop),1._dp)
+				Sv_sto = Sv_sto + MStoInter/Taille*beta_nm(XpartInter(iloop),-1._dp)
+			enddo
+		end if
+		if (Coupling_Vac) then
+			do iloop = 1, Taille
+				bCnCi_sto = bCnCi_sto - MStoVac/Taille*beta_nm(XpartVac(iloop),1._dp)*C(tab_fe(1,Nv))
+				bCnCv_sto = bCnCv_sto - MStoVac/Taille*beta_nm(XpartVac(iloop),-1._dp)*C(tab_fe(-1,Nv))
+				aCi_sto = aCi_sto + MStoVac/Taille*alpha_nm(XpartVac(iloop)+1._dp,1._dp)
+				aCv_sto = aCv_sto + MStoVac/Taille*alpha_nm(XpartVac(iloop)-1._dp,-1._dp)
+				Si_sto = Si_sto + MStoVac/Taille*beta_nm(XpartVac(iloop),1._dp)
+				Sv_sto = Sv_sto + MStoVac/Taille*beta_nm(XpartVac(iloop),-1._dp)
+			enddo
+		end if
+		
+		
 		print *, TF, T
 		call fcvode(TF,T,C,itask,IER)
 		print *, TF, T
 		print *, "Calcul deterministe : ok"
 		
-		DeltaT = 100._dp
+		DeltaT = min(2._dp*DeltaT,1000._dp)
 		TF = TF + DeltaT
 		
+		dt_sto = max(0.1_dp,DeltaT/10._dp)
+			
 		print *, "Calcul amas mobiles"
 		
 		C_Mob = Calcul_ConcMob(C,XpartInter,XpartVac,DeltaT/1000._dp,DeltaT)
@@ -498,15 +545,15 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 		if (Coupling_Inter) then
 			C_stotodis(1:Nf_Inter+Nb_Inter) = StotoDiscret(XpartInter,1)
 			XpartInter = Sampling(C,XpartInter,1)
-			C_sto(1:1200) = MStoInter*C_sto(1:1200)
+			C_sto(1:1200) = MStoInter*C_sto(1:1200)/sum(C_sto(1:1200))
 		end if
 		if (Coupling_Vac) then
 			C_stotodis(-Nf_Vac-Nb_Vac:-1) = StotoDiscret(XpartVac,-1)
 			XpartVac = Sampling(C,XpartVac,-1)
-			C_sto(-1200:-1) = MStoVac*C_sto(-1200:-1)
+			C_sto(-1200:-1) = MStoVac*C_sto(-1200:-1)/sum(C_sto(-1200:-1))
 		end if
 
-			
+		print *, "MStoInter : ", MStoInter
 		
 		call MPI_REDUCE(C_stotodis,MPI_C_stotodis,1+Nf_Inter+Nb_Inter+Nf_Vac+Nb_Vac,MPI_DOUBLE_PRECISION,MPI_SUM,0, MPI_COMM_WORLD,ierror)
 		MPI_C_stotodis = MPI_C_stotodis/real(numproc,8)
@@ -520,13 +567,39 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 		C_sto(-Nf_Vac+1:Nf_Inter-1) = C_init(tab_fe(-Nf_Vac+1,Nv):tab_fe(Nf_Inter-1,Nv))
 		
 
-		if (C(tab_fe(Nf_Inter,Nv)) > 1.e3) then
+		if ((C(tab_fe(Nf_Inter,Nv)) > 1.e3).and.(.not.Coupling_Inter)) then
 			Coupling_Inter = .True.
 			print *, "INTERSTITIELS"
+			C_Inter = 0._dp
+			C_Inter(Nf_Inter:Nf_Inter+Nb_Inter) = C(tab_fe(Nf_Inter,Nv):tab_fe(Nf_Inter+Nb_Inter,Nv))
+			MStoInter = sum(C_Inter)
+			if (methode.eq.1) then 
+				XpartInter = Multinomial(C_Inter,Nf_Inter,Nf_Inter+Nb_Inter,Taille) 
+			else 
+				N_0 = real(Nf_Inter+Nb_Inter/5._dp,8)
+				alpha_m = real(Nb_Inter/10._dp,8)
+				XpartInter = Metropolis(C_Inter,N_0,alpha_m,Taille)
+			end if
+			DeltaT = 0.1_dp
+			TF = T+DeltaT
+			dt_sto = 0.1_dp
 		end if
-		if (C(tab_fe(-Nf_Vac,Nv)) > 1.e7) then
+		if ((C(tab_fe(-Nf_Vac,Nv)) > 1.e10).and.(.not.Coupling_Vac)) then
 			Coupling_Vac = .True.
 			print *, "LACUNES"
+			C_Vac = 0._dp
+			C_Vac(Nf_Vac:Nf_Vac+Nb_Vac) = C(tab_fe(-Nf_Vac,Nv):tab_fe(-Nf_Vac-Nb_Vac,Nv):-1)
+			MStoVac = sum(C_Vac)
+			if (methode.eq.1) then 
+				XpartVac = -1._dp*Multinomial(C_Vac,Nf_Vac,Nf_Vac+Nb_Vac,Taille) 
+			else 
+				N_0 = real(Nf_Vac+Nb_Vac/5._dp,8)
+				alpha_m = real(Nb_Vac/10._dp,8)
+				XpartVac = -1._dp*Metropolis(C_vac,N_0,alpha_m,Taille)
+			end if
+			DeltaT = 0.1_dp
+			TF = T+DeltaT
+			dt_sto = 0.1_dp
 		end if
 		
 		
