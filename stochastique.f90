@@ -247,8 +247,10 @@ subroutine SSA(HLangevin,ConcMob,Tfinal)
 					! Pour les probas, on fait gaffe : beta_(n,i/v)C_i/v + alpha_(n,v/i) 
 					! Penser a computer Alpha_tab et Beta_tab sur -max(mv,mi),max(mv,mi) avec zero pour les inexistants
 					do jloop = -mv, mi
+						rloop = real(jloop,8)
 						p(jloop) = (beta_nm(pos,rloop)*ConcMob(tab_fe(jloop,mv))+alpha_nm(pos,-rloop))/nue
 					end do
+					!print *, "p + p = ", p(-mv)!+p(0)+p(mi) 
 					call random_number(u)
 					s = 0
 					do jloop = -mv, mi
@@ -343,9 +345,13 @@ function StotoDiscret(HLangevin,InterVac)
 			if (Inboundary(HLangevin(iloop),InterVac,0._dp)) then
 				ninf = ninf + 1
 			end if
-			do kloop = -5, 5
-				Conc(n+kloop) = Conc(n+kloop) + 1./h*Noyau(1./h*(n+kloop-HLangevin(iloop)))
-			end do
+			if (methode.eq.1) then
+				Conc(n) = Conc(n) + 1._dp	
+			else
+				do kloop = -5, 5
+					Conc(n+kloop) = Conc(n+kloop) + 1./h*Noyau(1./h*(n+kloop-HLangevin(iloop)))
+				end do
+			end if
 		end if
 	end do
 	if (InterVac.eq.0) then
@@ -426,10 +432,10 @@ function Sampling(Conc,HLangevin,InterVac)
 		print *, Nconc
 		MStoVac = MStoVac + Mconc		
 	end if
-	if (Nconc > 10*Npart) then
-		DeltaT  = DeltaT/4._dp
-		dt_sto = dt_sto/4._dp
-	end if
+	!if (Nconc > 2*Npart) then
+	!	DeltaT  = DeltaT/4._dp
+	!	dt_sto = dt_sto/4._dp
+	!end if
 	allocate(Hsto(Nconc))
 	if (methode.eq.1) then
 		select case (InterVac)
@@ -473,9 +479,13 @@ function Sampling(Conc,HLangevin,InterVac)
 				compt = compt+1
 				Sampling(compt) = Htot(iloop)
 				nsto = nint(Htot(iloop))
-				do kloop = -5, 5
-					C_sto(nsto+kloop) = C_sto(nsto+kloop) + 1./(real(Npart,8)*h)*Noyau(1./h*(nsto+kloop-Htot(iloop)))
-				end do
+				if (methode.eq.1) then
+					C_sto(nsto) = C_sto(nsto) + 1._dp	
+				else
+					do kloop = -5, 5
+						C_sto(nsto+kloop) = C_sto(nsto+kloop) + 1./(real(Npart,8)*h)*Noyau(1./h*(nsto+kloop-Htot(iloop)))
+					end do
+				end if
 			endif
 		end do
 		do iloop = compt+1,Npart
@@ -483,9 +493,13 @@ function Sampling(Conc,HLangevin,InterVac)
 			nn = int(u*compt)+1
 			Sampling(iloop) = Sampling(nn)
 			nsto = nint(Sampling(iloop))
-			do kloop = -5, 5
-				C_sto(nsto+kloop) = C_sto(nsto+kloop) + 1./(real(Npart,8)*h)*Noyau(1./h*(nsto+kloop-Sampling(iloop)))
-			end do
+			if (methode.eq.1) then
+				C_sto(nsto) = C_sto(nsto) + 1._dp
+			else
+				do kloop = -5, 5
+					C_sto(nsto+kloop) = C_sto(nsto+kloop) + 1./(real(Npart,8)*h)*Noyau(1./h*(nsto+kloop-Sampling(iloop)))
+				end do
+			end if
 		enddo
 	else ! -- il faut supprimer des particules
 	print *, "SUPPRESSION"
@@ -513,9 +527,13 @@ function Sampling(Conc,HLangevin,InterVac)
 				compt = compt + 1
 				Sampling(compt) = Sampling_inter(iloop)
 				nsto = nint(Sampling_inter(iloop))
-				do kloop = -5, 5
-					C_sto(nsto+kloop) = C_sto(nsto+kloop) + 1./(real(Npart,8)*h)*Noyau(1./h*(nsto+kloop-Sampling_inter(iloop)))
-				end do
+				if (methode.eq.1) then
+					C_sto(nsto) = C_sto(nsto) + 1._dp
+				else
+					do kloop = -5, 5
+						C_sto(nsto+kloop) = C_sto(nsto+kloop) + 1./(real(Npart,8)*h)*Noyau(1./h*(nsto+kloop-Sampling_inter(iloop)))
+					end do
+				end if
 			end if
 		end do
 		deallocate(Sampling_inter)

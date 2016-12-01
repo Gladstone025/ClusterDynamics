@@ -9,12 +9,12 @@ real(dp), parameter :: Pi = 3.14159265359
 
 !! ------------------------- Boundary and model parameters ------------------------- !!
 integer, parameter :: N_front = 200
-integer, parameter :: N_buff = 50
+integer, parameter :: N_buff = 100
 
 integer, parameter :: Nf_Inter = 400
-integer, parameter :: Nb_Inter = 50
+integer, parameter :: Nb_Inter = 400
 
-integer, parameter :: Nf_Vac = 100
+integer, parameter :: Nf_Vac = 200
 integer, parameter :: Nb_Vac = 50
 
 real(dp), parameter :: R_min = -1.e10
@@ -49,7 +49,7 @@ integer :: Nv, Ni, mv, mi, Nmaxv, Nmaxi
 real(dp), dimension(:,:), allocatable :: Alpha_tab, Beta_tab
 
 !! ----------------------- Parametres stochastiques ------------------------- !!
-integer, parameter :: Taille = 1000000
+integer, parameter :: Taille = 500000
 real(dp), dimension(Taille) :: Xpart = 0._dp
 real(dp), dimension(Taille) :: XpartInter = 0._dp
 real(dp), dimension(Taille) :: XpartVac = 0._dp
@@ -74,7 +74,7 @@ real(dp), dimension(:), allocatable :: MPI_C_stotodis
 integer :: iloop, jloop, kloop, mainloop
 real(dp) :: rloop
 
-real(dp), parameter :: h = 0.5
+real(dp), parameter :: h = 0.5_dp
 
 !! ----------------------- Parametres Ovcharenko ---------------------- !!
 real(dp), parameter :: evJ = 1.602176487e-19 
