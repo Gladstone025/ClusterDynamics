@@ -21,15 +21,16 @@ real(dp), parameter :: R_min = -1.e10
 
 real(dp) :: M_queue = 0 
 real(dp), dimension(1) :: Cvac
-logical :: quasi 
+real(dp) :: CmobVac, CmobInter
+logical :: quasi, quasi1
 integer :: etape, methode, cas_physique, Nmax
 logical :: Coupling_Inter = .False. 
 logical :: Coupling_Vac = .False.
 
 !! --------------------------- Parametres CVODE ----------------------------- !!
-real(dp) :: T, T0, TF, DeltaT
+real(dp) :: T, T0, TF, DeltaT, TF1, TF2, T2
 integer(c_int) :: IER
-real(dp), dimension(:), allocatable :: C, C_init, C_stotodis
+real(dp), dimension(:), allocatable :: C, C_init, C_stotodis, C_init1, C_init2
 real(dp), dimension(:), allocatable :: C_Inter, C_Vac, C_Mob
 real(dp), dimension(1) :: RPAR
 integer(c_long), dimension(1) :: IPAR
@@ -49,7 +50,7 @@ integer :: Nv, Ni, mv, mi, Nmaxv, Nmaxi
 real(dp), dimension(:,:), allocatable :: Alpha_tab, Beta_tab
 
 !! ----------------------- Parametres stochastiques ------------------------- !!
-integer, parameter :: Taille = 500000
+integer, parameter :: Taille = 250000
 real(dp), dimension(Taille) :: Xpart = 0._dp
 real(dp), dimension(Taille) :: XpartInter = 0._dp
 real(dp), dimension(Taille) :: XpartVac = 0._dp
