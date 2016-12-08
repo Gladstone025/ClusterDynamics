@@ -10,7 +10,7 @@ use mpi
 
 implicit none
 
-integer :: io
+integer :: io, nloop, mloop
 real(dp) :: Mtemp, nue
 
 namelist /parameter/etape,dt_sto,methode,cas_physique
@@ -224,11 +224,11 @@ call MPI_FINALIZE(ierror)
 
 case(3)
 
-	Ni = 1000
-	Nv = 200
+	Ni = 400 !1000
+	Nv = 50 !200
 	Neq = 1 + Ni + Nv
-	Nmaxi = 1000
-	Nmaxv = 200
+	Nmaxi = 400
+	Nmaxv = 50
 	mv = 1
 	mi = 1
 	! Allocation des principaux tableaux
@@ -248,10 +248,10 @@ case(3)
 			Beta_tab(iloop,jloop) = beta_nm(real(iloop,8),real(jloop,8))
 		end do 
 	end do
-	do iloop = -10,10
-		print *, iloop, Alpha_tab(iloop,-1), Alpha_tab(iloop,0), Alpha_tab(iloop,1), &
-		&Beta_tab(iloop,-1), Beta_tab(iloop,0), Beta_tab(iloop,1)
-	end do
+	!do iloop = -10,10
+	!	print *, iloop, Alpha_tab(iloop,-1), Alpha_tab(iloop,0), Alpha_tab(iloop,1), &
+	!	&Beta_tab(iloop,-1), Beta_tab(iloop,0), Beta_tab(iloop,1)
+	!end do
 	
 	print *, "init ok"
 
@@ -266,8 +266,7 @@ case(3)
 	TF = 100._dp
 	abstol = 1e-20_dp
 	reltol = 1e-5_dp
-	C_init(1) = Cq
-	C_init(2:Neq) = 0._dp
+	C_init = 0._dp
 
 	call fcvmalloc(T,C_init,meth,itmeth,iatol,reltol,abstol,Iout,Rout,IPAR,RPAR,IER)
 	if (IER /= 0) then
@@ -293,7 +292,8 @@ case(3)
 	print *, "dense ok"
 	!TF = 0.001_dp
 	TF = 100._dp!1.72383_dp!2.58397_dp
-	do mainloop = 1,200
+	quasi = .False.
+	do mainloop = 1,10
 		print *, mainloop
 		call fcvode(TF,T,C,itask,IER)
 		call output(C,T)
@@ -325,8 +325,8 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	Neq = 1 + Ni + Nv
 	Nmaxi = 5000
 	Nmaxv = 1000
-	mv = 1
-	mi = 1
+	mv = 4
+	mi = 3
 	allocate(C(Neq))
 	allocate(C_init(Neq))
 	allocate(C_stotodis(-Nv:Ni))
@@ -336,6 +336,8 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	allocate(C_Vac(1:Nv))
 	allocate(C_Mob(-mv:mi))
 	allocate(MPI_C_mob(-mv:mi))
+	allocate(bCn_sto(-mv:mi))
+	allocate(aCmob_sto(-mv:mi))
 	
 	allocate(Alpha_tab(-Nmaxv:Nmaxi,-mv:mi))
 	allocate(Beta_tab(-Nmaxv:Nmaxi,-mv:mi))
@@ -345,6 +347,12 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 			Alpha_tab(iloop,jloop) = alpha_nm(real(iloop,8),real(jloop,8))
 			Beta_tab(iloop,jloop) = beta_nm(real(iloop,8),real(jloop,8))
 		end do 
+	end do
+	
+	do iloop = -10,10
+		do jloop = -mv, mi
+			print *, iloop, jloop, Alpha_tab(iloop,jloop), Beta_tab(iloop, jloop)
+		end do	
 	end do
 	
 	
@@ -418,7 +426,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 		C_Inter = 0._dp
 		C_Inter(Nf_Inter:Nf_Inter+Nb_Inter) = C(tab_fe(Nf_Inter,Nv):tab_fe(Nf_Inter+Nb_Inter,Nv))
 		MStoInter = sum(C_Inter)
-		if (methode.eq.1) then 
+		if ((methode.eq.1) .or. (methode.eq.3)) then 
 			XpartInter = Multinomial(C_Inter,Nf_Inter,Nf_Inter+Nb_Inter,Taille) 
 		else 
 			N_0 = real(Nf_Inter+Nb_Inter/5._dp,8)
@@ -432,7 +440,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 		C_Vac = 0._dp
 		C_Vac(Nf_Vac:Nf_Vac+Nb_Vac) = C(tab_fe(-Nf_Vac,Nv):tab_fe(-Nf_Vac-Nb_Vac,Nv):-1)
 		MStoVac = sum(C_Vac)
-		if (methode.eq.1) then 
+		if ((methode.eq.1) .or. (methode.eq.3)) then 
 			XpartVac = -1._dp*Multinomial(C_Vac,Nf_Vac,Nf_Vac+Nb_Vac,Taille) 
 		else 
 			N_0 = real(Nf_Vac+Nb_Vac/5._dp,8)
@@ -461,29 +469,41 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 		print *, "Calcul deterministe"
 		
 		! Somme sur les amas stochastiques
-		bCnCi_sto = 0._dp
-		bCnCv_sto = 0._dp
-		aCi_sto = 0._dp
-		aCv_sto = 0._dp
+		!bCnCi_sto = 0._dp
+		!bCnCv_sto = 0._dp
+		!aCi_sto = 0._dp
+		!aCv_sto = 0._dp
+		bCn_sto = 0._dp
+		aCmob_sto = 0._dp
 		Si_sto = 0._dp
 		Sv_sto = 0._dp
 		if (Coupling_Inter) then	
 			print *, "FCVfun Coupling Inter"
 			do iloop = 1, Taille
-				bCnCi_sto = bCnCi_sto - MStoInter/Taille*beta_nm(XpartInter(iloop),1._dp)*C(tab_fe(1,Nv))
-				bCnCv_sto = bCnCv_sto - MStoInter/Taille*beta_nm(XpartInter(iloop),-1._dp)*C(tab_fe(-1,Nv))
-				aCi_sto = aCi_sto + MStoInter/Taille*alpha_nm(XpartInter(iloop)+1._dp,1._dp)
-				aCv_sto = aCv_sto + MStoInter/Taille*alpha_nm(XpartInter(iloop)-1._dp,-1._dp)
+				!bCnCi_sto = bCnCi_sto - MStoInter/Taille*beta_nm(XpartInter(iloop),1._dp)*C(tab_fe(1,Nv))
+				!bCnCv_sto = bCnCv_sto - MStoInter/Taille*beta_nm(XpartInter(iloop),-1._dp)*C(tab_fe(-1,Nv))
+				!aCi_sto = aCi_sto + MStoInter/Taille*alpha_nm(XpartInter(iloop)+1._dp,1._dp)
+				!aCv_sto = aCv_sto + MStoInter/Taille*alpha_nm(XpartInter(iloop)-1._dp,-1._dp)
+				do nloop = -mv,mi
+					rloop = real(nloop,8)
+					bCn_sto(nloop) = bCn_sto(nloop) - MStoInter/Taille*beta_nm(XpartInter(iloop),rloop)
+					aCmob_sto(nloop) = aCmob_sto(nloop) + MStoInter/Taille*alpha_nm(XpartInter(iloop)+rloop,rloop) 
+				end do
 				Si_sto = Si_sto + MStoInter/Taille*beta_nm(XpartInter(iloop),1._dp)
 				Sv_sto = Sv_sto + MStoInter/Taille*beta_nm(XpartInter(iloop),-1._dp)
 			enddo
 		end if
 		if (Coupling_Vac) then
 			do iloop = 1, Taille
-				bCnCi_sto = bCnCi_sto - MStoVac/Taille*beta_nm(XpartVac(iloop),1._dp)*C(tab_fe(1,Nv))
-				bCnCv_sto = bCnCv_sto - MStoVac/Taille*beta_nm(XpartVac(iloop),-1._dp)*C(tab_fe(-1,Nv))
-				aCi_sto = aCi_sto + MStoVac/Taille*alpha_nm(XpartVac(iloop)+1._dp,1._dp)
-				aCv_sto = aCv_sto + MStoVac/Taille*alpha_nm(XpartVac(iloop)-1._dp,-1._dp)
+			!	bCnCi_sto = bCnCi_sto - MStoVac/Taille*beta_nm(XpartVac(iloop),1._dp)*C(tab_fe(1,Nv))
+			!	bCnCv_sto = bCnCv_sto - MStoVac/Taille*beta_nm(XpartVac(iloop),-1._dp)*C(tab_fe(-1,Nv))
+			!	aCi_sto = aCi_sto + MStoVac/Taille*alpha_nm(XpartVac(iloop)+1._dp,1._dp)
+			!	aCv_sto = aCv_sto + MStoVac/Taille*alpha_nm(XpartVac(iloop)-1._dp,-1._dp)
+				do nloop = -mv,mi
+					rloop = real(nloop,8)
+					bCn_sto(nloop) = bCn_sto(nloop) - MStoVac/Taille*beta_nm(XpartVac(iloop),rloop)*C(tab_fe(nloop,Nv)) 
+					aCmob_sto(nloop) = aCmob_sto(nloop) + MStoVac/Taille*alpha_nm(XpartVac(iloop)+rloop,rloop) 
+				end do
 				Si_sto = Si_sto + MStoVac/Taille*beta_nm(XpartVac(iloop),1._dp)
 				Sv_sto = Sv_sto + MStoVac/Taille*beta_nm(XpartVac(iloop),-1._dp)
 			enddo
@@ -502,15 +522,19 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 		if (Coupling_Inter) then
 			if (methode.eq.1) then 
 				call SSA(XpartInter,C_Mob,DeltaT)
-			else 
+			else if (methode.eq.2) then
 				call Langevin(XpartInter,C_Mob,DeltaT) 
+			else if (methode.eq.3) then
+				call PropagationSto(XpartInter,C_Mob,DeltaT) 
 			end if
 		end if
 		if (Coupling_Vac) then
 			if (methode.eq.1) then 
 				call SSA(XpartVac,C_Mob,DeltaT)
-			else 
+			else if (methode.eq.2) then
 				call Langevin(XpartVac,C_Mob,DeltaT) 
+			else if (methode.eq.3) then
+				call PropagationSto(XpartVac,C_Mob,DeltaT) 
 			end if
 		end if
 		print *, "Calcul Langevin : ok"
@@ -567,7 +591,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 			C_Inter = 0._dp
 			C_Inter(Nf_Inter:Nf_Inter+Nb_Inter) = C(tab_fe(Nf_Inter,Nv):tab_fe(Nf_Inter+Nb_Inter,Nv))
 			MStoInter = sum(C_Inter)
-			if (methode.eq.1) then 
+			if ((methode.eq.1) .or. (methode.eq.3)) then 
 				XpartInter = Multinomial(C_Inter,Nf_Inter,Nf_Inter+Nb_Inter,Taille) 
 			else 
 				N_0 = real(Nf_Inter+Nb_Inter/5._dp,8)
@@ -584,7 +608,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 			C_Vac = 0._dp
 			C_Vac(Nf_Vac:Nf_Vac+Nb_Vac) = C(tab_fe(-Nf_Vac,Nv):tab_fe(-Nf_Vac-Nb_Vac,Nv):-1)
 			MStoVac = sum(C_Vac)
-			if (methode.eq.1) then 
+			if ((methode.eq.1) .or. (methode.eq.3)) then 
 				XpartVac = -1._dp*Multinomial(C_Vac,Nf_Vac,Nf_Vac+Nb_Vac,Taille) 
 			else 
 				N_0 = real(Nf_Vac+Nb_Vac/5._dp,8)

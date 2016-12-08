@@ -17,6 +17,9 @@ integer, parameter :: Nb_Inter = 400
 integer, parameter :: Nf_Vac = 200
 integer, parameter :: Nb_Vac = 50
 
+integer, parameter :: Nf_EL_Inter = 50
+integer, parameter :: Nf_EL_Vac = 50
+
 real(dp), parameter :: R_min = -1.e10
 
 real(dp) :: M_queue = 0 
@@ -31,7 +34,7 @@ logical :: Coupling_Vac = .False.
 real(dp) :: T, T0, TF, DeltaT, TF1, TF2, T2
 integer(c_int) :: IER
 real(dp), dimension(:), allocatable :: C, C_init, C_stotodis, C_init1, C_init2
-real(dp), dimension(:), allocatable :: C_Inter, C_Vac, C_Mob
+real(dp), dimension(:), allocatable :: C_Inter, C_Vac, C_Mob, bCn_sto, aCmob_sto
 real(dp), dimension(1) :: RPAR
 integer(c_long), dimension(1) :: IPAR
 real(dp) :: tt, tout
@@ -75,7 +78,7 @@ real(dp), dimension(:), allocatable :: MPI_C_stotodis
 integer :: iloop, jloop, kloop, mainloop
 real(dp) :: rloop
 
-real(dp), parameter :: h = 0.5_dp
+real(dp), parameter :: h = 0.4_dp
 
 !! ----------------------- Parametres Ovcharenko ---------------------- !!
 real(dp), parameter :: evJ = 1.602176487e-19 
@@ -225,22 +228,40 @@ function Z_nm(n, m)
 	endif
 end function
 
+function D_m(m)
+	implicit none
+	real(dp) :: m, D_m
+	D_m = 0._dp
+	select case (int(m))
+		case(-4)
+			D_m = D_0*exp(-Em_4v/(k_b*TempFe))
+		case(-3)
+			D_m = D_0*exp(-Em_3v/(k_b*TempFe))
+		case(-2)
+			D_m = D_0*exp(-Em_2v/(k_b*TempFe))
+		case(-1)
+			D_m = D_0*exp(-Em_v/(k_b*TempFe))
+		case(1)
+			D_m = D_0*exp(-Em_i/(k_b*TempFe))
+		case(2) 
+			D_m = D_0*exp(-Em_2i/(k_b*TempFe))
+		case(3)
+			D_m = D_0*exp(-Em_3i/(k_b*TempFe))
+	end select
+end function
+
 function beta_nm(n,m)
 	implicit none
 	real(dp) :: n, m, beta_nm
 	if ((n.eq.0) .or. (m.eq.0)) then
 		beta_nm = 0._dp
 	elseif ((n*m < 0) .and. (Z_v*(r_n(n)+r_n(m)) < r_iv)) then
-		if (m < 0) then
-			beta_nm = 4.*pi*r_iv*D_v
-		else
-			beta_nm = 4.*pi*r_iv*D_i
-		endif
+		beta_nm = 4.*pi*r_iv*D_m(m)
 	else
 		if (m < 0) then
-			beta_nm = 4.*pi*Z_v*(r_n(n)+r_n(m))*D_v
+			beta_nm = 4.*pi*Z_v*(r_n(n)+r_n(m))*D_m(m)
 		else
-			beta_nm = 4.*pi*Z_nm(n,m)*(r_n(n)+r_n(m))*D_i
+			beta_nm = 4.*pi*Z_nm(n,m)*(r_n(n)+r_n(m))*D_m(m)
 		endif
 	endif
 end function
@@ -299,18 +320,20 @@ function alpha_nm(n, m)
 	if (n.eq.m .or. n.eq.0 .or. m.eq.0) then
 		alpha_nm = 0._dp
 	! cas lacune-lacune
-	elseif (n < 0 .and. m < 0) then 
+	else if (n < 0 .and. m.eq.(-1)) then 
 		alpha_nm = beta_nm(n-m,m)/V_at*exp(-Eb_vv(n)/(k_b*TempFe))
 	! cas lacune-interstitiel
-	elseif (n > 0 .and. m < 0) then
+	else if (n > 0 .and. m.eq.(-1)) then
 		alpha_nm = beta_nm(n-m,m)/V_at*exp(-Eb_vi(n)/(k_b*TempFe))
 	! cas interstitiel-interstitiel
-	elseif (n > 0 .and. m > 0) then
+	else if (n > 0 .and. m.eq.(1)) then
 		alpha_nm = beta_nm(n-m,m)/V_at*exp(-Eb_ii(n)/(k_b*TempFe))
 	! cas interstitiel-lacune
-	else 
+	else if (n < 0 .and. m.eq.(1)) then 
 		alpha_nm = beta_nm(n-m,m)/V_at*exp(-Eb_iv(n)/(k_b*TempFe))
-	endif
+	else
+		alpha_nm = 0._dp
+	end if
 end function
 
 
