@@ -17,7 +17,7 @@ CONTAINS
 
 subroutine init()
 	implicit none
-	
+	integer :: iloop, jloop
 	Ni = 30000
 	Nv = 1000
 	Neq = 1 + Ni + Nv

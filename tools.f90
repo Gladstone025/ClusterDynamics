@@ -1,7 +1,7 @@
 module tools
 
 use prec_mod
-use parametres, only: Pi, iloop, jloop, kloop
+use parametres, only: Pi
 
 implicit none
 
@@ -12,6 +12,7 @@ contains
 
 subroutine output(C,T)
 implicit none
+	integer :: jloop
 	real(dp) :: T
 	real(dp), dimension(:) :: C
 	character(50) sTime
@@ -20,7 +21,7 @@ implicit none
 	write( sTime, '(f8.1)' )  T
 	write(*,*) sTime
 
-	fic = '../Data_Mob/4Distribution_'//trim(adjustl(sTime))
+	fic = '../Data_Mob/Det_Mob_Distribution_'//trim(adjustl(sTime))
 	open(unit=1,file=fic,status='replace')
 	do jloop = 1, size(C)
 		write(1,'(2(E15.6E3))') float(jloop), C(jloop)   

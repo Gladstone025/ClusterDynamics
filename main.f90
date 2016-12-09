@@ -10,7 +10,7 @@ use mpi
 
 implicit none
 
-integer :: io, nloop, mloop
+integer :: mainloop, nloop, mloop, iloop, jloop
 real(dp) :: Mtemp, nue
 
 namelist /parameter/etape,dt_sto,methode,cas_physique
@@ -167,7 +167,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	call FCVREINIT(T, C_init, iatol, reltol, abstol, IER)
 
 	! --- Boucle de couplage
-	do io = 1, 100
+	do mainloop = 1, 100
 		C_sto = 0._dp
 
 		if (methode.eq.1) then 
@@ -224,13 +224,13 @@ call MPI_FINALIZE(ierror)
 
 case(3)
 
-	Ni = 400 !1000
-	Nv = 50 !200
+	Ni = 1200
+	Nv = 500
 	Neq = 1 + Ni + Nv
-	Nmaxi = 400
-	Nmaxv = 50
-	mv = 1
-	mi = 1
+	Nmaxi = 1200
+	Nmaxv = 500
+	mv = 4
+	mi = 3
 	! Allocation des principaux tableaux
 	allocate(C(Neq))
 	allocate(C_init(Neq))
@@ -242,10 +242,10 @@ case(3)
 	allocate(Alpha_tab(-Nmaxv:Nmaxi,-mv:mi))
 	allocate(Beta_tab(-Nmaxv:Nmaxi,-mv:mi))
 	
-	do iloop = -Nmaxv,Nmaxi
-		do jloop = -mv,mi
-			Alpha_tab(iloop,jloop) = alpha_nm(real(iloop,8),real(jloop,8))
-			Beta_tab(iloop,jloop) = beta_nm(real(iloop,8),real(jloop,8))
+	do nloop = -Nmaxv,Nmaxi
+		do mloop = -mv,mi
+			Alpha_tab(nloop,mloop) = alpha_nm(real(nloop,8),real(mloop,8))
+			Beta_tab(nloop,mloop) = beta_nm(real(nloop,8),real(mloop,8))
 		end do 
 	end do
 	!do iloop = -10,10
@@ -291,13 +291,13 @@ case(3)
 	end if
 	print *, "dense ok"
 	!TF = 0.001_dp
-	TF = 100._dp!1.72383_dp!2.58397_dp
+	TF = 2.58397_dp!100._dp!1.72383_dp!2.58397_dp
 	quasi = .False.
-	do mainloop = 1,10
+	do mainloop = 1,5
 		print *, mainloop
 		call fcvode(TF,T,C,itask,IER)
 		call output(C,T)
-		TF = TF + 100._dp
+		TF = TF*10._dp!TF + 100._dp
 	enddo
 
 	deallocate(C)
@@ -325,8 +325,8 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	Neq = 1 + Ni + Nv
 	Nmaxi = 5000
 	Nmaxv = 1000
-	mv = 4
-	mi = 3
+	mv = 1
+	mi = 1
 	allocate(C(Neq))
 	allocate(C_init(Neq))
 	allocate(C_stotodis(-Nv:Ni))
@@ -342,16 +342,16 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	allocate(Alpha_tab(-Nmaxv:Nmaxi,-mv:mi))
 	allocate(Beta_tab(-Nmaxv:Nmaxi,-mv:mi))
 	
-	do iloop = -Nmaxv,Nmaxi
-		do jloop = -mv,mi
-			Alpha_tab(iloop,jloop) = alpha_nm(real(iloop,8),real(jloop,8))
-			Beta_tab(iloop,jloop) = beta_nm(real(iloop,8),real(jloop,8))
+	do nloop = -Nmaxv,Nmaxi
+		do mloop = -mv,mi
+			Alpha_tab(nloop,mloop) = alpha_nm(real(nloop,8),real(mloop,8))
+			Beta_tab(nloop,mloop) = beta_nm(real(nloop,8),real(mloop,8))
 		end do 
 	end do
 	
-	do iloop = -10,10
-		do jloop = -mv, mi
-			print *, iloop, jloop, Alpha_tab(iloop,jloop), Beta_tab(iloop, jloop)
+	do nloop = -10,10
+		do mloop = -mv, mi
+			print *, nloop, mloop, Alpha_tab(nloop,mloop), Beta_tab(nloop, mloop)
 		end do	
 	end do
 	
@@ -461,7 +461,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	print *, "Initialisation boucle stochastique : ok"
 	
 	! --- Boucle de couplage
-	do io = 1, 2000
+	do mainloop = 1, 2000
 		C_sto = 0._dp
 		
 		
@@ -679,10 +679,10 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	allocate(Alpha_tab(-Nmaxv:Nmaxi,-mv:mi))
 	allocate(Beta_tab(-Nmaxv:Nmaxi,-mv:mi))
 	
-	do iloop = -Nmaxv,Nmaxi
-		do jloop = -mv,mi
-			Alpha_tab(iloop,jloop) = alpha_nm(real(iloop,8),real(jloop,8))
-			Beta_tab(iloop,jloop) = beta_nm(real(iloop,8),real(jloop,8))
+	do nloop = -Nmaxv,Nmaxi
+		do mloop = -mv,mi
+			Alpha_tab(nloop,mloop) = alpha_nm(real(nloop,8),real(mloop,8))
+			Beta_tab(nloop,mloop) = beta_nm(real(nloop,8),real(mloop,8))
 		end do 
 	end do
 	
@@ -766,7 +766,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	print *, "Initialisation boucle stochastique : ok"
 	
 	! --- Boucle de couplage
-	do io = 1, 2000
+	do mainloop = 1, 2000
 		C_sto = 0._dp
 		
 		CmobInter = C_init1(tab_fe(1,Nv))

@@ -75,9 +75,7 @@ real(dp), dimension(:), allocatable :: MPI_C_Mob
 real(dp), dimension(:), allocatable :: MPI_C_stotodis
 
 !! --------------------------- Parametres utiles ---------------------------- !!
-integer :: iloop, jloop, kloop, mainloop
 real(dp) :: rloop
-
 real(dp), parameter :: h = 0.4_dp
 
 !! ----------------------- Parametres Ovcharenko ---------------------- !!
@@ -351,10 +349,11 @@ function F_fe(x,ConcMob)
 	real(dp) :: x
 	real(dp) :: F_fe
 	real(dp), dimension(:) :: ConcMob
+	integer :: mloop
 	F_fe = 0._dp
-	do kloop = -mv, mi
-		rloop = real(kloop,8)
-		F_fe = F_fe + rloop*(beta_nm(x,rloop)*ConcMob(tab_fe(kloop,mv))-alpha_nm(x,rloop)) 
+	do mloop = -mv, mi
+		rloop = real(mloop,8)
+		F_fe = F_fe + rloop*(beta_nm(x,rloop)*ConcMob(tab_fe(mloop,mv))-alpha_nm(x,rloop)) 
 	end do
 end function
 
@@ -363,10 +362,11 @@ function D_fe(x,ConcMob)
 	real(dp) :: x
 	real(dp) :: D_fe
 	real(dp), dimension(:) :: ConcMob
+	integer :: mloop
 	D_fe = 0._dp
-	do kloop = -mv, mi
-		rloop = real(kloop,8)
-		D_fe = D_fe + 0.5_dp*rloop*rloop*(beta_nm(x,rloop)*ConcMob(tab_fe(kloop,mv)) + alpha_nm(x,rloop))
+	do mloop = -mv, mi
+		rloop = real(mloop,8)
+		D_fe = D_fe + 0.5_dp*rloop*rloop*(beta_nm(x,rloop)*ConcMob(tab_fe(mloop,mv)) + alpha_nm(x,rloop))
 	end do
 end function
 
