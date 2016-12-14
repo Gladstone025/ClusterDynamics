@@ -224,13 +224,13 @@ call MPI_FINALIZE(ierror)
 
 case(3)
 
-	Ni = 1200
-	Nv = 500
+	Ni = 2500
+	Nv = 1000
 	Neq = 1 + Ni + Nv
-	Nmaxi = 1200
-	Nmaxv = 500
-	mv = 4
-	mi = 3
+	Nmaxi = 2500
+	Nmaxv = 1000
+	mv = 1!4
+	mi = 1!3
 	! Allocation des principaux tableaux
 	allocate(C(Neq))
 	allocate(C_init(Neq))
@@ -244,14 +244,16 @@ case(3)
 	
 	do nloop = -Nmaxv,Nmaxi
 		do mloop = -mv,mi
-			Alpha_tab(nloop,mloop) = alpha_nm(real(nloop,8),real(mloop,8))
-			Beta_tab(nloop,mloop) = beta_nm(real(nloop,8),real(mloop,8))
+			Alpha_tab(nloop,mloop) = alpha_nm(real(nloop,8),real(mloop,8)) + alpha_nm(real(nloop,8),real(mloop,8))*1.e-3
+			Beta_tab(nloop,mloop) = beta_nm(real(nloop,8),real(mloop,8)) + beta_nm(real(nloop,8),real(mloop,8))*1.e-4
 		end do 
 	end do
-	!do iloop = -10,10
-	!	print *, iloop, Alpha_tab(iloop,-1), Alpha_tab(iloop,0), Alpha_tab(iloop,1), &
-	!	&Beta_tab(iloop,-1), Beta_tab(iloop,0), Beta_tab(iloop,1)
-	!end do
+	
+	do nloop = -10,10
+		do mloop = -mv,mi
+			print *, nloop, mloop, Alpha_tab(nloop,mloop), Beta_tab(nloop,mloop)
+		end do 
+	end do
 	
 	print *, "init ok"
 
