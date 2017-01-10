@@ -327,13 +327,13 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	Neq = 1 + Ni + Nv
 	Nmaxi = 5000
 	Nmaxv = 1000
-	mv = 1
-	mi = 1
+	mv = 4
+	mi = 3
 	allocate(C(Neq))
 	allocate(C_init(Neq))
 	allocate(C_stotodis(-Nv:Ni))
 	allocate(MPI_C_stotodis(-Nv:Ni))
-	allocate(C_sto(-2000:2000))
+	allocate(C_sto(-2000:20000))
 	allocate(C_Inter(1:Ni))
 	allocate(C_Vac(1:Nv))
 	allocate(C_Mob(-mv:mi))
@@ -645,6 +645,7 @@ call MPI_FINALIZE(ierror)
 
 
 
+
 case(5)
 
 
@@ -658,199 +659,32 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	! --- Initialisation du générateur aléatoire 
 	call init_random_seed
 	print *, "Initialisation"
-	! --- Initialisation du solver
 	Ni = Nf_Inter+Nb_Inter
 	Nv = Nf_Vac+Nb_Vac
-	Neq = 1 + Ni + Nv
+	Ns = Nf_Sol+Nb_Sol
+	Neq = (1 + Ni + Nv)*(1+Ns)
 	Nmaxi = 5000
 	Nmaxv = 1000
 	mv = 1
 	mi = 1
+	ms = 1
 	allocate(C(Neq))
 	allocate(C_init(Neq))
-	allocate(C_init1(Neq))
-	allocate(C_init2(Neq))
 	allocate(C_stotodis(-Nv:Ni))
 	allocate(MPI_C_stotodis(-Nv:Ni))
-	allocate(C_sto(-2000:2000))
+	allocate(C_sto(-2000:20000))
 	allocate(C_Inter(1:Ni))
 	allocate(C_Vac(1:Nv))
 	allocate(C_Mob(-mv:mi))
 	allocate(MPI_C_mob(-mv:mi))
+	allocate(bCn_sto(-mv:mi))
+	allocate(aCmob_sto(-mv:mi))
 	
 	allocate(Alpha_tab(-Nmaxv:Nmaxi,-mv:mi))
 	allocate(Beta_tab(-Nmaxv:Nmaxi,-mv:mi))
-	
-	do nloop = -Nmaxv,Nmaxi
-		do mloop = -mv,mi
-			Alpha_tab(nloop,mloop) = alpha_nm(real(nloop,8),real(mloop,8))
-			Beta_tab(nloop,mloop) = beta_nm(real(nloop,8),real(mloop,8))
-		end do 
-	end do
-	
-	
-	call fnvinits(isolver,Neq,IER)
-	if (IER /= 0) then
-		write(*,*) 'ERROR in fnvinits'
-		stop
-	end if
-
-	T = 0._dp
-	T0 = 0._dp
-	TF = 100._dp
-	DeltaT = 100._dp
-	abstol = 1e-10_dp
-	reltol = 1e-5_dp
-	C_init(1) = 0._dp
-	C_init(2:Neq) = 0._dp
-
-	call fcvmalloc(T0,C_init,meth,itmeth,iatol,reltol,abstol,Iout,Rout,IPAR,RPAR,IER)
-	if (IER /= 0) then
-		write(*,*) 'ERROR in fcvmalloc', IER
-		stop
-	end if
-
-	maxerrfail = 15
-	nitermax = 10000
-
-	call fcvsetiin('MAX_NSTEPS',nitermax,IER)
-	call fcvsetiin('MAX_ERRFAIL',maxerrfail,IER)
-	if (IER /= 0) then
-		write(*,*) 'ERROR in fcvsetiin'
-		stop
-	end if
-
-	call fcvdense(Neq,IER)
-	if (IER /= 0) then
-		write(*,*) 'ERROR in fcvdense', IER
-		stop
-	end if
-
-	print *, "Initialisation : ok"
-
-	! --- Boucle principale solver+stochastique
-	
-	print *, "Boucle deterministe"
-	! --- On propage en full EDO jusqu'au critere d'arret
-	quasi = .False.
-	do while ((C(tab_fe(Nf_Inter,Nv)) < 1.e15) .and. (C(tab_fe(-Nf_Vac,Nv)) < 1.e17))
-		call fcvode(TF,T,C,itask,IER)
-		call output(C,T)
-		TF = TF + DeltaT
-	end do
-	if (C(tab_fe(Nf_Inter,Nv)) > 1.e15) then
-		print *, "INTERSTITIELS"
-		Coupling_Inter = .True.
-	end if
-	if (C(tab_fe(-Nf_Vac,Nv)) > 1.e17) then
-		Coupling_Vac = .True.
-		print *, "LACUNES"
-	end if
-	print *, "Boucle deterministe : ok"
-	
-	! --- On genere la partie stochastique et on restart avec la nouvelle CI sur C
-	
-	print *, "Initialisation boucle stochastique"
-	quasi = .True.
-
-	
-	C_init1 = 0._dp
-	C_init2 = 0._dp
-	CmobVac = C(tab_fe(-mv,Nv))
-	CmobInter = C(tab_fe(mi,Nv))
-	C_init1(tab_fe(-Nf_Vac+1,Nv):tab_fe(Nf_Inter-1,Nv)) = C(tab_fe(-Nf_Vac+1,Nv):tab_fe(Nf_Inter-1,Nv))
-	C_init2(tab_fe(-Nv,Nv):tab_fe(-Nf_Vac,Nv)) = C(tab_fe(-Nv,Nv):tab_fe(-Nf_Vac,Nv))
-	C_init2(tab_fe(Nf_Inter,Nv):tab_fe(Ni,Nv)) = C(tab_fe(Nf_Inter,Nv):tab_fe(Ni,Nv))
-		
-	T = 0._dp
-	call FCVREINIT(T, C_init1, iatol, reltol, abstol, IER)
-
-	print *, "Initialisation boucle stochastique : ok"
-	
-	! --- Boucle de couplage
-	do mainloop = 1, 2000
-		C_sto = 0._dp
-		
-		CmobInter = C_init1(tab_fe(1,Nv))
-		CmobVac = C_init1(tab_fe(-1,Nv))
-		
-		print *, "Calcul deterministe"
-		
-		! Somme sur les amas C_init2
-		bCnCi_sto = 0._dp
-		bCnCv_sto = 0._dp
-		aCi_sto = 0._dp
-		aCv_sto = 0._dp
-		Si_sto = 0._dp
-		Sv_sto = 0._dp
-		
-		do iloop = Nf_Inter, Nf_Inter + Nb_Inter-1
-			bCnCi_sto = bCnCi_sto - Beta_tab(iloop,1)*C_init2(tab_fe(iloop,Nv))*CmobInter
-			bCnCv_sto = bCnCv_sto - Beta_tab(iloop,-1)*C_init2(tab_fe(iloop,Nv))*CmobVac
-			aCi_sto = aCi_sto + Alpha_tab(iloop+1,1)*C_init2(tab_fe(iloop+1,Nv))
-			aCv_sto = aCv_sto + Alpha_tab(iloop-1,-1)*C_init2(tab_fe(iloop-1,Nv))
-			Si_sto = Si_sto + Beta_tab(iloop,1)*C_init2(tab_fe(iloop,Nv))
-			Sv_sto = Sv_sto + Beta_tab(iloop,-1)*C_init2(tab_fe(iloop,Nv))
-		enddo
-		
-		quasi1 = .False.
-		
-		TF1 = DeltaT
-		print *, TF, T
-		call fcvode(TF1,T,C,itask,IER)
-		print *, TF, T
-		print *, "Calcul deterministe : ok"
-		
-		T2 = TF1-DeltaT
-		TF2 = TF1
-		C_init1 = C
-		
-		quasi1 = .True.
-		
-		call FCVREINIT(T2, C_init2, iatol, reltol, abstol, IER)
-
-		call fcvode(TF2,T2,C,itask,IER)
-		C_init2 = C
-		
-		!DeltaT = min(2._dp*DeltaT,1000._dp)
-
-		
-		C_init1(tab_fe(-Nf_Vac+1,Nv):tab_fe(Nf_Inter-1,Nv)) = C_init1(tab_fe(-Nf_Vac+1,Nv):tab_fe(Nf_Inter-1,Nv)) + &
-															& C_init2(tab_fe(-Nf_Vac+1,Nv):tab_fe(Nf_Inter-1,Nv))
-															
-		C_init2(tab_fe(-Nv,Nv):tab_fe(-Nf_Vac,Nv)) = C_init2(tab_fe(-Nv,Nv):tab_fe(-Nf_Vac,Nv)) + &
-													& C_init1(tab_fe(-Nv,Nv):tab_fe(-Nf_Vac,Nv))
-		
-		C_init2(tab_fe(Nf_Inter,Nv):tab_fe(Ni,Nv)) = C_init2(tab_fe(Nf_Inter,Nv):tab_fe(Ni,Nv)) + &
-													& C_init1(tab_fe(Nf_Inter,Nv):tab_fe(Ni,Nv))
-													
-		C_init1(tab_fe(-Nv,Nv):tab_fe(-Nf_Vac,Nv)) = 0._dp
-		C_init1(tab_fe(Nf_Inter,Nv):tab_fe(Ni,Nv)) = 0._dp
-		C_init2(tab_fe(-Nf_Vac+1,Nv):tab_fe(Nf_Inter-1,Nv)) = 0._dp
-
-		T = 0._dp
-		if (rank.eq.0) then
-			call output(C_init1+C_init2,TF)
-		end if
-		call FCVREINIT(T, C_init1, iatol, reltol, abstol, IER)
-		
-		TF = TF + DeltaT
-	end do
-	
-	
-	deallocate(C)
-	deallocate(C_init)
-	deallocate(C_stotodis)
-	deallocate(MPI_C_stotodis)
-	deallocate(C_sto)
-	deallocate(C_Inter)
-	deallocate(C_Vac)
-	deallocate(C_Mob)
-	deallocate(MPI_C_Mob)
 
 	
 call MPI_FINALIZE(ierror)	
-
 
 
 end select

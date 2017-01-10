@@ -684,9 +684,9 @@ function Sampling(Conc,HLangevin,InterVac)
 	if (InterVac.eq.0) then
 		C_sto = MStochastique*C_sto/sum(C_sto)
 	else if (InterVac.eq.1) then
-		C_sto(1:1200) = C_sto(1:1200)/sum(C_sto(1:1200))
+		C_sto(1:20000) = C_sto(1:20000)/sum(C_sto(1:20000))
 	else if (InterVac.eq.(-1)) then
-		C_sto(-1200:-1) = C_sto(-1200:-1)/sum(C_sto(-1200:-1))			
+		C_sto(-2000:-1) = C_sto(-2000:-1)/sum(C_sto(-2000:-1))			
 	end if
 	deallocate(Hsto)
 	deallocate(Htot)

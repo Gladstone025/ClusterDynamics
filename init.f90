@@ -1,6 +1,7 @@
 module init_mod
 
 use prec_mod
+use cluster_mod
 use parametres
 
 implicit none
@@ -17,32 +18,37 @@ CONTAINS
 
 subroutine init()
 	implicit none
-	integer :: iloop, jloop
-	Ni = 30000
-	Nv = 1000
-	Neq = 1 + Ni + Nv
-	Nmaxi = 30000
-	Nmaxv = 1000
-	mv = 1
+	integer :: nloop, mloop, mobloop, sloop
+	type(cluster) :: MonoInter, MonoVac, MonoSol, clust
+	Ni = Nf_Inter+Nb_Inter
+	Nv = Nf_Vac+Nb_Vac
+	Ns = Nf_Sol+Nb_Sol
+	
 	mi = 1
-	! Allocation des principaux tableaux
-	allocate(C(Neq))
-	allocate(C_init(Neq))
-	!allocate(C_stotodis(Neq))
-	!allocate(MPI_C_stotodis(Neq))
-	!allocate(C_sto(Nmax))
+	mv = 1
+	ms = 1
 	
-	! Allocation et calcul des coefficients alpha/beta
-	allocate(Alpha_tab(-Nmaxv:Nmaxi,-max(mv,mi):max(mv,mi)))
-	allocate(Beta_tab(-Nmaxv:Nmaxi,-max(mv,mi):max(mv,mi)))
-	Alpha_tab = 0._dp
-	Beta_tab = 0._dp
+	Neq = (1+Ni+Nv)*(1+Ns)
+	Nmob = mi+mv+ms
+	Nimmob = Neq-Nmob
+
+	allocate(Mob(Nmob))
+	MonoInter = cluster(1,0,.True.)
+	MonoVac = cluster(-1,0,.True.)
+	MonoSol = cluster(0,1,.True.)	
+	Mob(1) = MonoInter
+	Mob(2) = MonoVac
+	Mob(3) = MonoSol
 	
-	do iloop = -Nmaxv,Nmaxi
-		do jloop = -mv,mi
-			Alpha_tab(iloop,jloop) = alpha_nm(real(iloop,8),real(jloop,8))
-			Beta_tab(iloop,jloop) = beta_nm(real(iloop,8),real(jloop,8))
-		end do 
+	allocate(Det(Neq))
+	do nloop = -Nv, Ni
+		do sloop = 0, Ns
+			clust = cluster(nloop,sloop,.False.)
+			if (IsMobile(nloop,sloop)) then
+				clust%mobile = .True.
+			end if
+			Det(C2I(clust)) = clust
+		end do	
 	end do
 
 

@@ -2,6 +2,7 @@ module parametres
 
 
 use prec_mod
+use cluster_mod
 
 implicit none
 real(dp), parameter :: Pi = 3.14159265359
@@ -17,10 +18,18 @@ integer, parameter :: Nb_Inter = 400
 integer, parameter :: Nf_Vac = 200
 integer, parameter :: Nb_Vac = 50
 
+integer, parameter :: Nf_Sol = 200
+integer, parameter :: Nb_Sol = 50
+
+type(cluster), dimension(:), allocatable :: Mob, Det, Immob
+
 integer, parameter :: Nf_EL_Inter = 50
 integer, parameter :: Nf_EL_Vac = 50
+integer, parameter :: Nf_EL_Sol = 50
 
 real(dp), parameter :: R_min = -1.e10
+
+real(dp), dimension(:), allocatable :: Mob_i, Det_i, Immob_i
 
 real(dp) :: M_queue = 0 
 real(dp), dimension(1) :: Cvac
@@ -48,12 +57,15 @@ integer, parameter :: itask = 1
 integer(c_long), dimension(21) :: iout
 real(dp), dimension(6) :: rout
 integer(c_long) :: maxerrfail, nitermax
-integer(c_long) :: Neq
-integer :: Nv, Ni, mv, mi, Nmaxv, Nmaxi
+integer(c_long) :: Neq, Nmob, Nimmob
+!integer :: Nv, Ni, Ns
+integer :: mv, mi, ms
+integer :: Nmaxv, Nmaxi, Nmaxs
 real(dp), dimension(:,:), allocatable :: Alpha_tab, Beta_tab
+real(dp), dimension(:,:,:), allocatable :: Alpha_tab_Sol, Beta_tab_Sol
 
 !! ----------------------- Parametres stochastiques ------------------------- !!
-integer, parameter :: Taille = 250000
+integer, parameter :: Taille = 50000
 real(dp), dimension(Taille) :: Xpart = 0._dp
 real(dp), dimension(Taille) :: XpartInter = 0._dp
 real(dp), dimension(Taille) :: XpartVac = 0._dp
@@ -140,6 +152,7 @@ real(dp), parameter :: D_v    = D_0*exp(-Em_v/(k_b*TempFe))
 real(dp), parameter :: D_i    = D_0*exp(-Em_i/(k_b*TempFe))
 real(dp), parameter :: Cv_eq  = 1./V_at*exp(-Ef_v/(k_b*TempFe))
 real(dp), parameter :: Ci_eq  = 1./V_at*exp(-Ef_i/(k_b*TempFe))
+
 
 
 contains
@@ -371,6 +384,15 @@ function D_fe(x,ConcMob)
 end function
 
 
+
+function tab_FeHe(amas, debut, fin)
+	implicit none
+	integer :: tab_FeHe, pos1, pos2, debut, fin
+	type(cluster) :: amas
+	pos1 = amas%defect
+	pos2 = amas%solute
+	tab_FeHe = 1 + debut + pos2*(debut+fin+1) + pos1
+end function
 
 
 

@@ -29,13 +29,15 @@ all: Couplage
 clean:
 	@rm -f *~ *.o *.mod *__genmod.f90 Couplage
 
-Couplage: prec.o parametres.o init.o tools.o fonctioncvode.o stochastique.o main.o 
-	$(F90) $(F90OPT) -o Couplage prec.o parametres.o init.o tools.o fonctioncvode.o stochastique.o main.o -L${libdir} ${LIBRARIES}  ${LINKFLAGS}
+Couplage: prec.o cluster.o parametres.o init.o tools.o fonctioncvode.o stochastique.o main.o 
+	$(F90) $(F90OPT) -o Couplage prec.o cluster.o parametres.o init.o tools.o fonctioncvode.o stochastique.o main.o -L${libdir} ${LIBRARIES}  ${LINKFLAGS}
 prec.o: prec.f90
 	$(F90) $(F90OPT) -c prec.f90 -L${libdir} ${LIBRARIES} ${LINKFLAGS}
-parametres.o: prec.f90 parametres.f90
+cluster.o: cluster.f90
+	$(F90) $(F90OPT) -c cluster.f90 -L${libdir} ${LIBRARIES} ${LINKFLAGS}
+parametres.o: prec.f90 cluster.f90 parametres.f90
 	$(F90) $(F90OPT) -c parametres.f90 -L${libdir} ${LIBRARIES} ${LINKFLAGS}
-init.o: prec.f90 parametres.f90 init.f90
+init.o: prec.f90 cluster.f90 parametres.f90 init.f90
 	$(F90) $(F90OPT) -c init.f90 -L${libdir} ${LIBRARIES} ${LINKFLAGS}	 
 tools.o: prec.f90 parametres.f90 tools.f90 
 	$(F90) $(F90OPT) -c tools.f90 -L${libdir} ${LIBRARIES} ${LINKFLAGS}
@@ -43,5 +45,9 @@ fonctioncvode.o: prec.f90 parametres.f90 tools.f90 fonctioncvode.f90
 	$(F90) $(F90OPT) -c fonctioncvode.f90 -L${libdir} ${LIBRARIES} ${LINKFLAGS}
 stochastique.o: prec.f90 parametres.f90 tools.f90 stochastique.f90 
 	$(F90) $(F90OPT) -c stochastique.f90 -L${libdir} ${LIBRARIES} ${LINKFLAGS}
-main.o: prec.f90 parametres.f90 init.f90 tools.f90 fonctioncvode.f90 stochastique.f90 main.f90 
+main.o: prec.f90 cluster.f90 parametres.f90 init.f90 tools.f90 fonctioncvode.f90 stochastique.f90 main.f90 
 	$(F90) $(F90OPT) -c main.f90 -L${libdir} ${LIBRARIES} ${LINKFLAGS} 
+	
+	
+	
+	
