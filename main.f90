@@ -224,13 +224,17 @@ call MPI_FINALIZE(ierror)
 
 case(3)
 
-	Ni = 2500
-	Nv = 1000
+	Ni = 500
+	Nv = 100
+	Ns = 0
+	ms = 0
 	Neq = 1 + Ni + Nv
-	Nmaxi = 2500
-	Nmaxv = 1000
+	Nmaxi = 500
+	Nmaxv = 100
 	mv = 1!4
 	mi = 1!3
+	
+	call init()
 	! Allocation des principaux tableaux
 	allocate(C(Neq))
 	allocate(C_init(Neq))
@@ -293,13 +297,13 @@ case(3)
 	end if
 	print *, "dense ok"
 	!TF = 0.001_dp
-	TF = 2.58397_dp!100._dp!1.72383_dp!2.58397_dp
+	TF = 10._dp!1.72383_dp!2.58397_dp
 	quasi = .False.
-	do mainloop = 1,5
+	do mainloop = 1,50
 		print *, mainloop
 		call fcvode(TF,T,C,itask,IER)
 		call output(C,T)
-		TF = TF*10._dp!TF + 100._dp
+		TF = TF + 10._dp!TF*10._dp!
 	enddo
 
 	deallocate(C)

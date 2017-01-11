@@ -27,6 +27,7 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 	real(dp), dimension(-mv:mi) :: Cmob, bCnCmob, aCmob
 	real(dp), dimension(-mv:mi,0:ms) :: CmobSol, bCnCmobSol, aCmobSol
 	integer :: index_mob
+	type(cluster) :: C_nu, C_mu, C_mob, C_diff, C_null
 	ConcP(1:Neq) = 0.d0
 	IER = 0
 	if (cas_physique.eq.1) then 
@@ -211,11 +212,11 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 			do nloop = -mv, mi
 				ConcP(tab_fe(nloop,Nv)) = bCnCmob(nloop) + aCmob(nloop)
 				if (nloop.eq.(1)) then
-					ConcP(tab_fe(nloop,Nv)) = ConcP(tab_fe(nloop,Nv)) + G_i - Z_i*rho_d*D_i*(Cmob(nloop)-Ci_eq) - &
-											&6._dp/l_gb*sqrt(Z_i*rho_d+Si/D_i)*D_i*(Cmob(nloop)-Ci_eq)
+					ConcP(tab_fe(nloop,Nv)) = ConcP(tab_fe(nloop,Nv)) + G_i !- Z_i*rho_d*D_i*(Cmob(nloop)-Ci_eq) - &
+											!&6._dp/l_gb*sqrt(Z_i*rho_d+Si/D_i)*D_i*(Cmob(nloop)-Ci_eq)
 				else if (nloop.eq.(-1)) then
-					ConcP(tab_fe(nloop,Nv)) = ConcP(tab_fe(nloop,Nv)) + G_v - Z_v*rho_d*D_v*(Cmob(nloop)-Cv_eq) - &
-											&6._dp/l_gb*sqrt(Z_v*rho_d+Sv/D_v)*D_v*(Cmob(nloop)-Cv_eq)
+					ConcP(tab_fe(nloop,Nv)) = ConcP(tab_fe(nloop,Nv)) + G_v !- Z_v*rho_d*D_v*(Cmob(nloop)-Cv_eq) - &
+											!&6._dp/l_gb*sqrt(Z_v*rho_d+Sv/D_v)*D_v*(Cmob(nloop)-Cv_eq)
 				end if
 			end do	
 		end if
@@ -225,36 +226,73 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 		!Sv = 0._dp
 		!bCnCmob = 0._dp
 		!aCmob = 0._dp
-		ConcP(1:Neq) = 0.d0
+		ConcP(1:Neq) = 0._dp
 		IER = 0
+		C_null = cluster(0._dp,0._dp,.False.)
+		C_null%ind = C2I(C_null)
 		! Dynamique amas immobiles
 		do nloop = 1, Neq
-			ConcP(nloop) = 0._dp
-			if (.not.(Det(nloop)%mobile)) then
+			C_nu = Det(nloop)
+			if (.not.(C_nu%mobile)) then
 				do mloop = 1, Nmob
-					index_mob = I2C(Mob(mloop))
-					ConcP(nloop) = ConcP(nloop) + Beta_clust(Det(nloop)-Mob(mloop),Mob(mloop))*Conc(nloop-index_mob)*Conc(index_mob) - &
-								 & (Beta_clust(Det(nloop),Mob(mloop))*Conc(index_mob) + Alpha_clust(Det(nloop),Mob(mloop)))*Conc(nloop) + &
-								 & Alpha_clust(Det(nloop)+Mob(mloop),Mob(mloop))*Conc(nloop+index_mob) !! SURCHARGE OP !!
+					C_mob = Mob(mloop)
+					! Flux nu-mu to nu
+					C_diff = C_nu-C_mob
+					if (IsInDomain(C_nu-C_mob)) then
+						ConcP(C_nu%ind) = ConcP(C_nu%ind) + &
+										& Beta_clust(C_nu-C_mob,C_mob)*Conc(C_diff%ind)*Conc(C_mob%ind) - &
+										& Alpha_clust(C_nu,C_mob)*Conc(C_nu%ind)
+					end if
+					! Flux nu to nu+mu
+					C_diff = C_nu+C_mob
+					if (IsInDomain(C_nu+C_mob)) then
+						ConcP(C_nu%ind) = ConcP(C_nu%ind) - &
+										& Beta_clust(C_nu,C_mob)*Conc(C_nu%ind)*Conc(C_mob%ind) + &
+										& Alpha_clust(C_nu+C_mob,C_mob)*Conc(C_diff%ind)
+					end if
 				end do
 			end if
 		end do
 		! Dynamique amas mobiles
-		do mloop = 1, Nmob
-			index_mob = I2C(Mob(mloop))
-			ConcP(index_mob) = 0._dp
-			do sloop = 1, Nmob
-				index_mob2 = I2C(Mob(sloop))
-				ConcP(index_mob) = ConcP(index_mob) + Beta_clust(Mob(mloop)-Mob(sloop),Mob(sloop))*Conc(index_mob-index_mob2)*Conc(index_mob2) - &
-								 & Alpha_clust(Mob(mloop),Mob(sloop))*Conc(index_mob) - &
-								 & Beta_clust(Mob(mloop),Mob(sloop))*Conc(index_mob)*Conc(index_mob2) + &
-								 & Alpha_clust(Mob(mloop)+Mob(sloop),Mob(sloop))*Conc(index_mob+index_mob2)				
+		do nloop = 1, Nmob
+			C_nu = Mob(nloop)
+			ConcP(C_nu%ind) = 0._dp
+			do mloop = 1, Nmob
+				C_mob = Mob(mloop)
+				! Flux nu-mu to nu
+				C_diff = C_nu-C_mob
+				if (IsInDomain(C_nu-C_mob)) then
+					ConcP(C_nu%ind) = ConcP(C_nu%ind) + &
+									& Beta_clust(C_nu-C_mob,C_mob)*Conc(C_diff%ind)*Conc(C_mob%ind) - &
+									& Alpha_clust(C_nu,C_mob)*Conc(C_nu%ind) 
+				end if	
+				! Flux nu to nu+mu
+				C_diff = C_nu+C_mob	
+				if (IsInDomain(C_nu+C_mob)) then		 
+					ConcP(C_nu%ind) = ConcP(C_nu%ind) - &
+									 & Beta_clust(C_nu,C_mob)*Conc(C_nu%ind)*Conc(C_mob%ind) + &
+									 & Alpha_clust(C_nu+C_mob,C_mob)*Conc(C_diff%ind)				
+				end if
 			end do
-			do nloop = 1, Neq
-				ConcP(index_mob) = ConcP(index_mob) - Beta_clust(Det(nloop),Mob(mloop))*Conc(index_mob)*Conc(nloop) - &
-								 & Alpha_clust(Det(nloop)+Mob(mloop),Mob(mloop)*Conc(nloop+index_mob)
+			do mloop = 1, Neq
+				! Flux mu to nu+mu
+				C_mu = Det(mloop)
+				C_diff = C_nu+C_mu	
+				if (IsInDomain(C_nu+C_mu)) then
+					ConcP(C_nu%ind) = ConcP(C_nu%ind) - &
+									& Beta_clust(C_mu,C_nu)*Conc(C_nu%ind)*Conc(C_mu%ind) + &
+									& Alpha_clust(C_mu+C_nu,C_nu)*Conc(C_diff%ind)
+				end if
 			end do
 		end do
+		! Gestion des termes sources
+		do nloop = 1, Neq
+			ConcP(nloop) = ConcP(nloop) + G_source(nloop)
+		end do
+		! Ajout des forces de puits
+		
+		! Gestion de (0,0)
+		ConcP(C_null%ind) = 0._dp
 	else
 		print *, "Cas physique inexistant"
 		IER = 1

@@ -19,14 +19,15 @@ CONTAINS
 subroutine init()
 	implicit none
 	integer :: nloop, mloop, mobloop, sloop
+	real(dp) :: rn, rm, rmob, rs
 	type(cluster) :: MonoInter, MonoVac, MonoSol, clust
-	Ni = Nf_Inter+Nb_Inter
-	Nv = Nf_Vac+Nb_Vac
-	Ns = Nf_Sol+Nb_Sol
+	!Ni = Nf_Inter+Nb_Inter
+	!Nv = Nf_Vac+Nb_Vac
+	!Ns = Nf_Sol+Nb_Sol
 	
-	mi = 1
-	mv = 1
-	ms = 1
+	!mi = 1
+	!mv = 1
+	!ms = 1
 	
 	Neq = (1+Ni+Nv)*(1+Ns)
 	Nmob = mi+mv+ms
@@ -34,20 +35,37 @@ subroutine init()
 
 	allocate(Mob(Nmob))
 	MonoInter = cluster(1,0,.True.)
+	MonoInter%ind = C2I(MonoInter)
 	MonoVac = cluster(-1,0,.True.)
-	MonoSol = cluster(0,1,.True.)	
+	MonoVac%ind = C2I(MonoVac)
+	!MonoSol = cluster(0,1,.True.)	
+	!MonoSol%ind = C2I(MonoSol)
 	Mob(1) = MonoInter
 	Mob(2) = MonoVac
-	Mob(3) = MonoSol
+	!Mob(3) = MonoSol
 	
 	allocate(Det(Neq))
+	allocate(G_source(Neq))
+	G_source = 0._dp
 	do nloop = -Nv, Ni
 		do sloop = 0, Ns
-			clust = cluster(nloop,sloop,.False.)
-			if (IsMobile(nloop,sloop)) then
+			rn = real(nloop,8)
+			rs = real(sloop,8)
+			clust = cluster(rn,rs,.False.)
+			if (IsMobile(rn,rs)) then
 				clust%mobile = .True.
 			end if
-			Det(C2I(clust)) = clust
+			clust%ind = C2I(clust)
+			Det(clust%ind) = clust
+			if (nloop.eq.-8) then
+				G_source(clust%ind) = G_8v
+			else if (nloop.eq.-1) then
+				G_source(clust%ind) = G_v
+			else if (nloop.eq.1) then
+				G_source(clust%ind) = G_i
+			else if (nloop.eq.4) then
+				G_source(clust%ind) = G_4i
+			end if
 		end do	
 	end do
 
