@@ -248,8 +248,8 @@ case(3)
 	
 	do nloop = -Nmaxv,Nmaxi
 		do mloop = -mv,mi
-			Alpha_tab(nloop,mloop) = alpha_nm(real(nloop,8),real(mloop,8)) + alpha_nm(real(nloop,8),real(mloop,8))*1.e-3
-			Beta_tab(nloop,mloop) = beta_nm(real(nloop,8),real(mloop,8)) + beta_nm(real(nloop,8),real(mloop,8))*1.e-4
+			Alpha_tab(nloop,mloop) = alpha_nm(real(nloop,8),real(mloop,8))
+			Beta_tab(nloop,mloop) = beta_nm(real(nloop,8),real(mloop,8))
 		end do 
 	end do
 	
@@ -299,7 +299,7 @@ case(3)
 	!TF = 0.001_dp
 	TF = 10._dp!1.72383_dp!2.58397_dp
 	quasi = .False.
-	do mainloop = 1,50
+	do mainloop = 1,2
 		print *, mainloop
 		call fcvode(TF,T,C,itask,IER)
 		call output(C,T)

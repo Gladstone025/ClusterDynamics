@@ -9,7 +9,6 @@ use para_Fe
 implicit none
 
 
-
 !! ------------------------- Boundary and model parameters ------------------------- !!
 integer, parameter :: N_front = 200
 integer, parameter :: N_buff = 100

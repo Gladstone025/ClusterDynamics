@@ -179,8 +179,8 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 			do nloop = -mv,-1
 				do mloop = -mv, mi
 					bCnCmob(nloop) = bCnCmob(nloop) + Beta_tab(nloop-mloop,mloop)*Conc(tab_fe(nloop-mloop,Nv))*Cmob(mloop) - &
-									& Beta_tab(nloop,mloop)*Cmob(nloop)*Cmob(mloop) - &
-									& Beta_tab(mloop,nloop)*Cmob(nloop)*Cmob(mloop)
+									& Beta_tab(nloop,mloop)*Cmob(mloop)*Cmob(mloop) !- &
+									!& Beta_tab(mloop,nloop)*Cmob(nloop)*Cmob(mloop)
 					aCmob(nloop) = aCmob(nloop) - Alpha_tab(nloop,mloop)*Cmob(nloop) + &
 									& Alpha_tab(nloop+mloop,mloop)*Conc(tab_fe(nloop+mloop,Nv)) + &
 									& Alpha_tab(mloop+nloop,nloop)*Conc(tab_fe(nloop+mloop,Nv))
@@ -194,8 +194,8 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 			do nloop = 1, mi
 				do mloop = -mv, mi
 					bCnCmob(nloop) = bCnCmob(nloop) + Beta_tab(nloop-mloop,mloop)*Conc(tab_fe(nloop-mloop,Nv))*Cmob(mloop) - &
-									& Beta_tab(nloop,mloop)*Cmob(nloop)*Cmob(mloop) - &
-									& Beta_tab(mloop,nloop)*Cmob(nloop)*Cmob(mloop)
+									& Beta_tab(nloop,mloop)*Cmob(mloop)*Cmob(mloop) !- &
+									!& Beta_tab(mloop,nloop)*Cmob(nloop)*Cmob(mloop)
 					aCmob(nloop) = aCmob(nloop) - Alpha_tab(nloop,mloop)*Cmob(nloop) + &
 									& Alpha_tab(nloop+mloop,mloop)*Conc(tab_fe(nloop+mloop,Nv)) + &
 									& Alpha_tab(mloop+nloop,nloop)*Conc(tab_fe(nloop+mloop,Nv)) 
@@ -220,6 +220,7 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 				end if
 			end do	
 		end if
+		print *, T
 	else if (cas_physique.eq.3) then
 		!! definition aCmob, bCnCmob
 		!Si = 0._dp
@@ -238,17 +239,17 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 					C_mob = Mob(mloop)
 					! Flux nu-mu to nu
 					C_diff = C_nu-C_mob
-					if (IsInDomain(C_nu-C_mob)) then
+					if (IsInDomain(C_diff)) then
 						ConcP(C_nu%ind) = ConcP(C_nu%ind) + &
-										& Beta_clust(C_nu-C_mob,C_mob)*Conc(C_diff%ind)*Conc(C_mob%ind) - &
+										& Beta_clust(C_diff,C_mob)*Conc(C_diff%ind)*Conc(C_mob%ind) - &
 										& Alpha_clust(C_nu,C_mob)*Conc(C_nu%ind)
 					end if
 					! Flux nu to nu+mu
 					C_diff = C_nu+C_mob
-					if (IsInDomain(C_nu+C_mob)) then
+					if (IsInDomain(C_diff)) then
 						ConcP(C_nu%ind) = ConcP(C_nu%ind) - &
 										& Beta_clust(C_nu,C_mob)*Conc(C_nu%ind)*Conc(C_mob%ind) + &
-										& Alpha_clust(C_nu+C_mob,C_mob)*Conc(C_diff%ind)
+										& Alpha_clust(C_diff,C_mob)*Conc(C_diff%ind)
 					end if
 				end do
 			end if
@@ -259,29 +260,33 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 			ConcP(C_nu%ind) = 0._dp
 			do mloop = 1, Nmob
 				C_mob = Mob(mloop)
-				! Flux nu-mu to nu
+				! Flux nu-mu to nu sur mobiles
 				C_diff = C_nu-C_mob
-				if (IsInDomain(C_nu-C_mob)) then
+				if (IsInDomain(C_diff)) then
 					ConcP(C_nu%ind) = ConcP(C_nu%ind) + &
-									& Beta_clust(C_nu-C_mob,C_mob)*Conc(C_diff%ind)*Conc(C_mob%ind) - &
+									& Beta_clust(C_diff,C_mob)*Conc(C_diff%ind)*Conc(C_mob%ind) - &
 									& Alpha_clust(C_nu,C_mob)*Conc(C_nu%ind) 
 				end if	
-				! Flux nu to nu+mu
+				! Flux nu to nu+mu sur mobiles
 				C_diff = C_nu+C_mob	
-				if (IsInDomain(C_nu+C_mob)) then		 
-					ConcP(C_nu%ind) = ConcP(C_nu%ind) - &
-									 & Beta_clust(C_nu,C_mob)*Conc(C_nu%ind)*Conc(C_mob%ind) + &
-									 & Alpha_clust(C_nu+C_mob,C_mob)*Conc(C_diff%ind)				
+				if (IsInDomain(C_diff)) then		 
+					ConcP(C_nu%ind) = ConcP(C_nu%ind) + Alpha_clust(C_diff,C_mob)*Conc(C_diff%ind) - &
+									 & Beta_clust(C_nu,C_mob)*Conc(C_mob%ind)*Conc(C_mob%ind) !+ &
+									 !& Alpha_clust(C_diff,C_mob)*Conc(C_diff%ind)				
 				end if
 			end do
 			do mloop = 1, Neq
-				! Flux mu to nu+mu
+				! Flux mu to nu+mu sur immobiles
 				C_mu = Det(mloop)
 				C_diff = C_nu+C_mu	
-				if (IsInDomain(C_nu+C_mu)) then
+				if (IsInDomain(C_diff)) then! .and. .not.(C_mu%mobile)) then
 					ConcP(C_nu%ind) = ConcP(C_nu%ind) - &
 									& Beta_clust(C_mu,C_nu)*Conc(C_nu%ind)*Conc(C_mu%ind) + &
-									& Alpha_clust(C_mu+C_nu,C_nu)*Conc(C_diff%ind)
+									& Alpha_clust(C_diff,C_nu)*Conc(C_diff%ind)
+				end if
+				if (IsInDomain(C_diff) .and. (C_mu%mobile)) then
+					ConcP(C_nu%ind) = ConcP(C_nu%ind) + Beta_clust(C_mu,C_nu)*Conc(C_nu%ind)*Conc(C_mu%ind) 
+									
 				end if
 			end do
 		end do
@@ -293,6 +298,7 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 		
 		! Gestion de (0,0)
 		ConcP(C_null%ind) = 0._dp
+		print *, T
 	else
 		print *, "Cas physique inexistant"
 		IER = 1
