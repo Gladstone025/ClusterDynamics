@@ -169,6 +169,37 @@ function Langevin1part(x,ConcMob,Tfinal)
 	end if
 end function Langevin1part
 
+! distinguer les cas ?
+function Langevin1part_Clust(C_nu,ConcMob,Tfinal)
+	implicit none
+	integer :: K, kloop
+	type(cluster) :: C_nu, Langevin1part_Clust
+	real(dp) :: x, s
+	real(dp) :: C1
+	real(dp) :: Tfinal
+	real(dp) :: sqrtdt
+	real(dp), dimension(1) :: G
+	real(dp), dimension(:) :: ConcMob
+	K = int(Tfinal/dt_sto)
+	sqrtdt = sqrt(dt_sto)
+	x = C_nu%defect
+	s = C_nu%solute
+	if (cas_physique.eq.1) then
+		C1 = ConcMob(1)
+		do kloop = 1, K
+			call gen_rand_normal(G,1)
+			x = x + dt_sto*(F_scal(x,C1)) + sqrtdt*sqrt(D_scal(x,C1))*G(1)
+		end do
+	else if (cas_physique.eq.2) then
+		do kloop = 1, K
+			call gen_rand_normal(G,1)
+			x = x + dt_sto*(F_fe(x,ConcMob)) + sqrtdt*sqrt(D_fe(x,ConcMob))*G(1)
+		end do
+	end if
+	Langevin1part_Clust = cluster(x,s,.False.,0)
+	Langevin1part_Clust%ind = C2I(x,s)
+end function Langevin1part_Clust
+
 
 function EKMC1part(x,ConcMob,Tfinal)
 	implicit none
@@ -235,6 +266,77 @@ function EKMC1part(x,ConcMob,Tfinal)
 	end if
 end function EKMC1part
 
+
+function EKMC1part_Clust(C_nu,ConcMob,Tfinal)
+	implicit none
+	integer :: mloop
+	type(cluster) :: C_nu, EKMC1part_Clust
+	real(dp), dimension(:) :: ConcMob
+	real(dp) :: x, s
+	real(dp) :: Tfinal, C1
+	real(dp) :: dte, nue, expe, pos, u, somme
+	real(dp), dimension(:), allocatable :: p
+	x = C_nu%defect
+	s = C_nu%solute
+	if (cas_physique.eq.1) then
+		allocate(p(1))
+		C1 = ConcMob(1)
+		dte = 0.d0
+		do while (dte < Tfinal)
+			pos = EKMC1part
+			nue = beta(pos)*C1+alpha(pos)
+			call tirage_exp(expe,nue)
+			dte = dte + expe
+			if (dte < Tfinal) then
+				p(1) = beta(pos)*C1/(beta(pos)*C1+alpha(pos))
+				call random_number(u)
+				if (u.le.p(1)) then 
+					x = x+1.
+				else 
+					x = x-1.
+				endif
+			endif
+		enddo
+		deallocate(p)
+	else if (cas_physique.eq.2) then
+		allocate(p(-mv:mi))
+		dte = 0.d0
+		do while (dte < Tfinal)
+			pos = x
+			nue = 0._dp
+			do mloop = -mv, mi
+				rloop = real(mloop,8)
+				nue = nue + beta_nm(pos,rloop)*ConcMob(tab_fe(mloop,mv))+alpha_nm(pos,-rloop)
+			end do
+			call tirage_exp(expe,nue)
+			dte = dte + expe
+			if (dte < Tfinal) then
+				! Pour les probas, on fait gaffe : beta_(n,i/v)C_i/v + alpha_(n,v/i) 
+				! Penser a computer Alpha_tab et Beta_tab sur -max(mv,mi),max(mv,mi) avec zero pour les inexistants
+				do mloop = -mv, mi
+					rloop = real(mloop,8)
+					p(mloop) = (beta_nm(pos,rloop)*ConcMob(tab_fe(mloop,mv))+alpha_nm(pos,-rloop))/nue
+				end do
+				!print *, "p + p = ", p(-mv)!+p(0)+p(mi) 
+				call random_number(u)
+				s = 0
+				do mloop = -mv, mi
+					s = s + p(mloop)
+					if (s > u) then 
+						x = x + real(mloop,8)
+						exit
+					endif
+				end do
+			endif
+		enddo
+		deallocate(p)
+	end if
+	EKMC1part_Clust = cluster(x,s,.False.,0)
+	EKMC1part_Clust%ind = C2I(x,s)
+end function EKMC1part_Clust
+
+
+
 subroutine PropagationSto(HLangevin,ConcMob,Tfinal)
 	implicit none
 	integer :: iloop
@@ -249,6 +351,23 @@ subroutine PropagationSto(HLangevin,ConcMob,Tfinal)
 		end if
 	end do
 end subroutine PropagationSto
+
+
+subroutine PropagationSto_Clust(HLangevin,ConcMob,Tfinal)
+	implicit none
+	integer :: iloop
+	real(dp) :: Tfinal
+	real(dp), dimension(:) :: ConcMob
+	type(cluster), dimension(:) :: HLangevin
+	do iloop = 1, size(HLangevin)
+		if ((HLangevin(iloop)%defect > Nf_Inter+Nf_EL_Inter) .or. (HLangevin(iloop)%defect < -(Nf_Vac+Nf_EL_Vac))) then
+			HLangevin(iloop) = Langevin1part_Clust(HLangevin(iloop),ConcMob,Tfinal)
+		else
+			HLangevin(iloop)%defect = real(nint(HLangevin(iloop)%defect),8)
+			HLangevin(iloop) = EKMC1part(HLangevin(iloop),ConcMob,Tfinal)
+		end if
+	end do
+end subroutine PropagationSto_Clust
 
 
 ! revoir toutes les boucles
@@ -400,6 +519,60 @@ function Multinomial(Conc,Nmin,Nmax,Npart)
 		end do	
 	end do
 end function
+
+
+! A revoir peut etre
+function Multinomial_Clust(Conc,Npart)
+	implicit none
+	integer :: Npart, Ntot, Nmin, Nmax
+	integer :: iloop, kloop
+	real(dp) :: s, u
+	real(dp), dimension(:) :: Conc
+	real(dp), dimension(size(Conc)) :: P
+	type(cluster), dimension(Npart) :: Multinomial_Clust
+	Ntot = size(Conc)
+	P = Conc/sum(Conc)
+	do iloop = 1, Npart
+		call random_number(u)
+		s = 0
+		do kloop = 1, Ntot
+			s = s + P(kloop)
+			if (s > u) then
+				Multinomial_Clust(iloop) = I2C(kloop) !Det(kloop) ! A voir
+				exit
+			endif
+		end do	
+	end do
+end function Multinomial_Clust
+
+
+
+function InBoundary_Clust(C_nu, IVS)
+	implicit none
+	type(cluster) :: C_nu
+	integer :: IVS
+	logical :: InBoundary_Clust
+	InBoundary_Clust = .False.
+	select case (IVS)
+	! - Cas Ovcharenko
+	case(0)
+		if (C_nu%defect < N_front) then
+			InBoundary_Clust = .True.
+		end if
+	! - Cas general - Interstitiels+Solutes
+	case(1)
+		if (C_nu%defect < Nf_Inter .and. C_nu%solutes < Nf_Sol) then
+			InBoundary_Clust = .True.
+		end if
+	! - Cas general - Vacancies+Solutes
+	case(-1) 
+		if (C_nu%defect > -Nf_Vac .and. C_nu%solutes < Nf_Sol) then
+			InBoundary_Clust = .True.
+		end if
+	end select
+end function InBoundary_Clust
+
+
 
 
 function Inboundary(x,InterVac,a)

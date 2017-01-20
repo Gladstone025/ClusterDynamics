@@ -28,6 +28,12 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 	real(dp), dimension(-mv:mi,0:ms) :: CmobSol, bCnCmobSol, aCmobSol
 	integer :: index_mob
 	type(cluster) :: C_nu, C_mu, C_mob, C_diff, C_null
+	type(cluster) :: MonoVac, MonoInter
+	MonoVac = cluster(-1._dp, 0._dp,.True.,0)
+	MonoVac%ind = C2I(MonoVac)
+	MonoInter = cluster(1._dp, 0._dp,.True.,0)
+	MonoInter%ind = C2I(MonoInter)
+	!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	ConcP(1:Neq) = 0.d0
 	IER = 0
 	if (cas_physique.eq.1) then 
@@ -179,8 +185,8 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 			do nloop = -mv,-1
 				do mloop = -mv, mi
 					bCnCmob(nloop) = bCnCmob(nloop) + Beta_tab(nloop-mloop,mloop)*Conc(tab_fe(nloop-mloop,Nv))*Cmob(mloop) - &
-									& Beta_tab(nloop,mloop)*Cmob(mloop)*Cmob(mloop) !- &
-									!& Beta_tab(mloop,nloop)*Cmob(nloop)*Cmob(mloop)
+									& Beta_tab(nloop,mloop)*Cmob(nloop)*Cmob(mloop) - &
+									& Beta_tab(mloop,nloop)*Cmob(nloop)*Cmob(mloop)
 					aCmob(nloop) = aCmob(nloop) - Alpha_tab(nloop,mloop)*Cmob(nloop) + &
 									& Alpha_tab(nloop+mloop,mloop)*Conc(tab_fe(nloop+mloop,Nv)) + &
 									& Alpha_tab(mloop+nloop,nloop)*Conc(tab_fe(nloop+mloop,Nv))
@@ -194,8 +200,8 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 			do nloop = 1, mi
 				do mloop = -mv, mi
 					bCnCmob(nloop) = bCnCmob(nloop) + Beta_tab(nloop-mloop,mloop)*Conc(tab_fe(nloop-mloop,Nv))*Cmob(mloop) - &
-									& Beta_tab(nloop,mloop)*Cmob(mloop)*Cmob(mloop) !- &
-									!& Beta_tab(mloop,nloop)*Cmob(nloop)*Cmob(mloop)
+									& Beta_tab(nloop,mloop)*Cmob(nloop)*Cmob(mloop) - &
+									& Beta_tab(mloop,nloop)*Cmob(nloop)*Cmob(mloop)
 					aCmob(nloop) = aCmob(nloop) - Alpha_tab(nloop,mloop)*Cmob(nloop) + &
 									& Alpha_tab(nloop+mloop,mloop)*Conc(tab_fe(nloop+mloop,Nv)) + &
 									& Alpha_tab(mloop+nloop,nloop)*Conc(tab_fe(nloop+mloop,Nv)) 
@@ -212,19 +218,19 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 			do nloop = -mv, mi
 				ConcP(tab_fe(nloop,Nv)) = bCnCmob(nloop) + aCmob(nloop)
 				if (nloop.eq.(1)) then
-					ConcP(tab_fe(nloop,Nv)) = ConcP(tab_fe(nloop,Nv)) + G_i !- Z_i*rho_d*D_i*(Cmob(nloop)-Ci_eq) - &
-											!&6._dp/l_gb*sqrt(Z_i*rho_d+Si/D_i)*D_i*(Cmob(nloop)-Ci_eq)
+					ConcP(tab_fe(nloop,Nv)) = ConcP(tab_fe(nloop,Nv)) + G_i - Z_i*rho_d*D_i*(Cmob(nloop)-Ci_eq) - &
+											&6._dp/l_gb*sqrt(Z_i*rho_d+Si/D_i)*D_i*(Cmob(nloop)-Ci_eq)
 				else if (nloop.eq.(-1)) then
-					ConcP(tab_fe(nloop,Nv)) = ConcP(tab_fe(nloop,Nv)) + G_v !- Z_v*rho_d*D_v*(Cmob(nloop)-Cv_eq) - &
-											!&6._dp/l_gb*sqrt(Z_v*rho_d+Sv/D_v)*D_v*(Cmob(nloop)-Cv_eq)
+					ConcP(tab_fe(nloop,Nv)) = ConcP(tab_fe(nloop,Nv)) + G_v - Z_v*rho_d*D_v*(Cmob(nloop)-Cv_eq) - &
+											&6._dp/l_gb*sqrt(Z_v*rho_d+Sv/D_v)*D_v*(Cmob(nloop)-Cv_eq)
 				end if
 			end do	
 		end if
 		print *, T
 	else if (cas_physique.eq.3) then
 		!! definition aCmob, bCnCmob
-		!Si = 0._dp
-		!Sv = 0._dp
+		Si = 0._dp
+		Sv = 0._dp
 		!bCnCmob = 0._dp
 		!aCmob = 0._dp
 		ConcP(1:Neq) = 0._dp
@@ -260,33 +266,41 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 			ConcP(C_nu%ind) = 0._dp
 			do mloop = 1, Nmob
 				C_mob = Mob(mloop)
-				! Flux nu-mu to nu sur mobiles
+				! Flux nu-mu to nu sur mobiles M_nu
 				C_diff = C_nu-C_mob
 				if (IsInDomain(C_diff)) then
 					ConcP(C_nu%ind) = ConcP(C_nu%ind) + &
 									& Beta_clust(C_diff,C_mob)*Conc(C_diff%ind)*Conc(C_mob%ind) - &
 									& Alpha_clust(C_nu,C_mob)*Conc(C_nu%ind) 
 				end if	
-				! Flux nu to nu+mu sur mobiles
+				! Flux nu to nu+mu sur mobiles M
 				C_diff = C_nu+C_mob	
 				if (IsInDomain(C_diff)) then		 
-					ConcP(C_nu%ind) = ConcP(C_nu%ind) + Alpha_clust(C_diff,C_mob)*Conc(C_diff%ind) - &
-									 & Beta_clust(C_nu,C_mob)*Conc(C_mob%ind)*Conc(C_mob%ind) !+ &
-									 !& Alpha_clust(C_diff,C_mob)*Conc(C_diff%ind)				
+					ConcP(C_nu%ind) = ConcP(C_nu%ind) - &
+									 & Beta_clust(C_nu,C_mob)*Conc(C_nu%ind)*Conc(C_mob%ind) + &
+									 & Alpha_clust(C_diff,C_mob)*Conc(C_diff%ind)				
+				end if
+				! Forces de puits
+				if (C_nu%defect.eq.1) then
+					Si = Si + Beta_Clust(MonoVac,C_mob)*Conc(C_mob%ind)
+				else if (C_nu%defect.eq.-1) then
+					Sv = Sv + Beta_Clust(MonoInter,C_mob)*Conc(C_mob%ind)
 				end if
 			end do
 			do mloop = 1, Neq
-				! Flux mu to nu+mu sur immobiles
+				! Flux mu to nu+mu sur total Omega
 				C_mu = Det(mloop)
 				C_diff = C_nu+C_mu	
-				if (IsInDomain(C_diff)) then! .and. .not.(C_mu%mobile)) then
+				if (IsInDomain(C_diff)) then
 					ConcP(C_nu%ind) = ConcP(C_nu%ind) - &
 									& Beta_clust(C_mu,C_nu)*Conc(C_nu%ind)*Conc(C_mu%ind) + &
 									& Alpha_clust(C_diff,C_nu)*Conc(C_diff%ind)
 				end if
-				if (IsInDomain(C_diff) .and. (C_mu%mobile)) then
-					ConcP(C_nu%ind) = ConcP(C_nu%ind) + Beta_clust(C_mu,C_nu)*Conc(C_nu%ind)*Conc(C_mu%ind) 
-									
+				! Forces de puits
+				if (C_nu%defect.eq.1) then
+					Si = Si + Beta_Clust(C_mu,MonoInter)*Conc(C_mu%ind)
+				else if (C_nu%defect.eq.-1) then
+					Sv = Sv + Beta_Clust(C_mu,MonoVac)*Conc(C_mu%ind)
 				end if
 			end do
 		end do
@@ -295,7 +309,12 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 			ConcP(nloop) = ConcP(nloop) + G_source(nloop)
 		end do
 		! Ajout des forces de puits
-		
+		Si = Si - 2._dp*Beta_Clust(MonoInter,MonoInter)*Conc(MonoInter%ind)
+		Sv = Sv - 2._dp*Beta_Clust(MonoVac,MonoVac)*Conc(MonoVac%ind)
+		ConcP(MonoInter%ind) = ConcP(MonoInter%ind) - Z_i*rho_d*D_i*(Conc(MonoInter%ind) - Ci_eq) - &
+											&6._dp/l_gb*sqrt(Z_i*rho_d+Si/D_i)*D_i*(Conc(MonoInter%ind) - Ci_eq)
+		ConcP(MonoVac%ind) = ConcP(MonoVac%ind) - Z_v*rho_d*D_v*(Conc(MonoVac%ind) - Cv_eq) - &
+											&6._dp/l_gb*sqrt(Z_v*rho_d+Sv/D_v)*D_v*(Conc(MonoVac%ind) - Cv_eq)
 		! Gestion de (0,0)
 		ConcP(C_null%ind) = 0._dp
 		print *, T

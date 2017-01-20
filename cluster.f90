@@ -20,6 +20,9 @@ end interface
 interface operator (-)	
 		module procedure c_sub
 end interface
+interface operator (=)
+		module procedure c_eq
+end interface
 	
 CONTAINS
 
@@ -62,9 +65,6 @@ function IsInDomain(c)
 	else
 		IsInDomain = .False.
 	end if
-	if ((c%defect.eq.0) .and. (c%solute.eq.0)) then
-		IsInDomain = .False.
-	end if
 end function
 
 
@@ -86,6 +86,15 @@ type(cluster) function c_sub(c1,c2)
 	c_sub%ind = C2I(c_sub)
 end function c_sub	
 
+type(cluster) function c_eq(c1)
+	implicit none
+	type(cluster), intent(in) :: c1
+	c_eq%defect = c1%defect
+	c_eq%solute = c1%solute
+	c_eq%mobile = c1%mobile
+	c_eq%ind    = c1%ind
+end function c_eq	
+
 
 		
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Utile ?
@@ -97,6 +106,8 @@ function I2C(ind)
 	p1 = ind - p2*(1+Nv+Ni) - (Nv+1)
 	I2C%defect = p1
 	I2C%solute = p2
+	I2C%mobile = IsMobile(p1,p2)
+	I2C%ind = ind
 end function
 		
 		
