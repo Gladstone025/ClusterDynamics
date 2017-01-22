@@ -674,20 +674,188 @@ end function
 
 
 
-function Sampling(Conc,HLangevin,InterVac)
+function StotoDiscret_Clust(HLangevin,IVS)
 	implicit none
-	integer :: InterVac
+	integer :: IVS
+	integer :: iloop, kloop
+	type(cluster) :: C_nu
+	type(cluster), dimension(:) :: HLangevin
+	real(dp), dimension(Neq) :: Conc, StotoDiscret_Clust
+	integer :: Npart, n, s, ninf, ind
+	ninf = 0
+	Npart = size(HLangevin)
+	! Penser a ecrire une fonction du type "Inboundary" qui renvoit un booleen
+	Conc = 0._dp
+	StotoDiscret_Clust = 0._dp
+	do iloop = 1, Npart
+		if (Inboundary_Clust(HLangevin(iloop),IVS)) then
+			n = nint(HLangevin(iloop)%defect)
+			s = nint(HLangevin(iloop)%solute)
+			ninf = ninf + 1
+			C_nu = C_init(real(n,8),real(s,8))
+			Conc(C_nu%ind) = Conc(C_nu%ind) + 1._dp	
+		end if
+	end do
+	if (IVS.eq.0) then
+		MDiscret = MStochastique*(real(ninf,8)/real(Npart,8))
+		if (sum(Conc) > 0._dp) then
+			Conc = MDiscret*Conc/sum(Conc)
+		end if
+		MStochastique = MStochastique - MDiscret
+		StotoDiscret_Clust = Conc
+	else if (IVS.eq.1) then
+		MDisInter = MStoInter*(real(ninf,8)/real(Npart,8))
+		if (sum(Conc) > 0._dp) then
+			Conc = MDisInter*Conc/sum(Conc)
+		end if
+		MStoInter = MStoInter - MDisInter
+		StotoDiscret_Clust = Conc
+	else if (IVS.eq.(-1)) then
+		MDisVac = MStoVac*(real(ninf,8)/real(Npart,8))
+		if (sum(Conc) > 0._dp) then
+			Conc = MDisVac*Conc/sum(Conc)
+		end if
+		MStoVac = MStoVac - MDisVac
+		StotoDiscret_Clust = Conc
+	end if
+end function StotoDiscret_Clust
+
+
+! modifier le nom sampling_inter
+! supprimer variables inutiles
+function Sampling_Clust(Conc,HLangevin,IVS)
+	implicit none
+	integer :: IVS
 	integer :: iloop, kloop
 	real(dp), dimension(:) :: Conc
-	real(dp), dimension(:) :: HLangevin
+	type(cluster), dimension(:) :: HLangevin
 	real(dp), dimension(:), allocatable :: Conc_buff
-	real(dp), dimension(size(HLangevin)) :: Sampling
-	real(dp), dimension(:), allocatable :: Htot, Hsto
-	real(dp), dimension(:), allocatable :: Sampling_inter
+	type(cluster), dimension(size(HLangevin)) :: Sampling_Clust
+	type(cluster), dimension(:), allocatable :: Htot, Hsto
+	type(cluster), dimension(:), allocatable :: Sampling_temp
 	integer :: Nconc, Npart, Ninf, Ndiff
 	integer :: compt, nn, nsto
 	real(dp) :: Mconc, Mlangevin
 	real(dp) :: a, u
+	real(dp) :: n, s
+	type(cluster) :: C_nu
+	! -- On initialise
+	Ninf = 0
+	compt = 0
+	Npart = size(HLangevin)
+	a = 0.5
+	if (IVS.eq.0) then
+		allocate(Conc_buff(1:Neq))
+		Conc_buff = 0._dp
+		Conc_buff(BuffV_Index) = Conc(BuffV_Index)
+		Npart = size(HLangevin)
+		Mconc = sum(Conc_buff)
+		Nconc = int(Mconc*Npart/MStochastique)
+		MStochastique = MStochastique + Mconc
+	else if (IVS.eq.1) then
+		allocate(Conc_buff(1:Neq))
+		Conc_buff = 0._dp
+		Conc_buff(BuffI_Index) = Conc(BuffI_Index)
+		Npart = size(HLangevin)
+		Mconc = sum(Conc_buff)
+		Nconc = int(Mconc*Npart/MStoInter)
+		MStoInter = MStoInter + Mconc	
+	else if (IVS.eq.(-1)) then
+		allocate(Conc_buff(1:Neq))
+		Conc_buff = 0._dp
+		Conc_buff(BuffV_Index) = Conc(BuffV_Index)
+		Npart = size(HLangevin)
+		Mconc = sum(Conc_buff)
+		Nconc = int(Mconc*Npart/MStoVac)
+		MStoVac = MStoVac + Mconc		
+	end if
+	allocate(Hsto(Nconc))
+	Hsto = Multinomial_Clust(Conc_buff, Nconc)
+	allocate(Htot(Npart+Nconc))
+	Htot(1:Npart) = HLangevin(1:Npart)
+	Htot(Npart+1:Npart+Nconc) = Hsto(1:Nconc)
+	! -- Htot contient *toutes* les particules
+	! -- On compte celles qui contribuent a la partie deterministe
+	do iloop = 1, Npart+Nconc
+		if (Inboundary_Clust(Htot(iloop),IVS)) then
+			Ninf = Ninf+1
+		endif
+	end do
+	Ndiff = Nconc - Ninf
+	! -- Puis on gere le resampling en fonction de Ndiff
+	if (Ndiff < 0) then ! -- il faudra dupliquer des particules
+	print *, "DUPLICATION"
+		do iloop = 1, Npart+Nconc
+			if (.not.Inboundary_Clust(Htot(iloop),IVS)) then
+				compt = compt+1
+				Sampling_Clust(compt) = Htot(iloop)
+				nsto = nint(Htot(iloop)%ind)
+				C_sto(nsto) = C_sto(nsto) + 1._dp	
+			endif
+		end do
+		do iloop = compt+1,Npart
+			call random_number(u)
+			nn = int(u*compt)+1
+			Sampling_Clust(iloop) = Sampling_Clust(nn)
+			nsto = nint(Sampling(iloop)%ind)
+			C_sto(nsto) = C_sto(nsto) + 1._dp	
+		enddo
+	else ! -- il faut supprimer des particules
+	print *, "SUPPRESSION"
+		allocate(Sampling_temp(Npart+Ndiff))
+		Sampling_temp = C_null
+		compt = 0
+		! On place tous ceux qui sont pas deterministes
+		do iloop = 1, Npart+Nconc
+			if (.not.Inboundary_Clust(Htot(iloop),IVS)) then
+				compt = compt+1
+				Sampling_temp(compt) = Htot(iloop)
+			endif
+		end do	
+		compt = 0
+		! On en elimine au hasard qu'on identifie avec le flag C_null
+		do while (compt < Ndiff)
+			call random_number(u)
+			nn = int(u*(Npart+Ndiff))+1
+			if (Sampling_temp(nn).ne.C_null) then
+				Sampling_temp(nn) = C_null
+				compt = compt+1
+			end if
+		end do
+		compt = 0
+		do iloop = 1, Npart+Ndiff
+			if (Sampling_temp(iloop).ne.C_null) then
+				compt = compt + 1
+				Sampling_Clust(compt) = Sampling_temp(iloop)
+				nsto = nint(Sampling_temp(iloop)%ind)
+				C_sto(nsto) = C_sto(nsto) + 1._dp	
+			end if
+		end do
+		deallocate(Sampling_temp)
+	endif
+	C_sto = C_sto/sum(C_sto)
+	deallocate(Hsto)
+	deallocate(Htot)
+end function Sampling_Clust
+
+
+
+
+function Sampling(Conc,HLangevin,IVS)
+	implicit none
+	integer :: IVS
+	integer :: iloop, kloop
+	real(dp), dimension(:) :: Conc
+	type(cluster), dimension(:) :: HLangevin
+	real(dp), dimension(:), allocatable :: Conc_buff
+	type(cluster), dimension(size(HLangevin)) :: Sampling
+	type(cluster), dimension(:), allocatable :: Htot, Hsto
+	type(cluster), dimension(:), allocatable :: Sampling_inter
+	integer :: Nconc, Npart, Ninf, Ndiff
+	integer :: compt, nn, nsto
+	real(dp) :: Mconc, Mlangevin
+	real(dp) :: a, u
+	type(cluster) :: C_nu
 	! -- On initialise
 	Ninf = 0
 	compt = 0

@@ -17,12 +17,25 @@ end type cluster
 interface operator (+)	
 		module procedure c_add
 end interface
+
 interface operator (-)	
 		module procedure c_sub
 end interface
-interface operator (=)
+
+interface operator (==)
 		module procedure c_eq
 end interface
+
+interface operator (/=)
+		module procedure c_ne
+end interface
+
+interface assignment (=)
+		module procedure c_assign
+end interface
+
+
+type(cluster) :: C_null = cluster(0._dp,0._dp,.False.,0)
 	
 CONTAINS
 
@@ -68,6 +81,19 @@ function IsInDomain(c)
 end function
 
 
+function C_init(n,s)
+	implicit none
+	type(cluster) :: C_init
+	real(dp) :: n, s
+	integer :: ind
+	logical :: mob
+	C_init%defect = n
+	C_init%solute = s
+	C_init%mobile = IsMobile(n,s)
+	C_init%ind = C2I(C_init)
+end function
+
+
 type(cluster) function c_add(c1,c2)
 	implicit none
 	type(cluster), intent(in) :: c1, c2
@@ -86,18 +112,40 @@ type(cluster) function c_sub(c1,c2)
 	c_sub%ind = C2I(c_sub)
 end function c_sub	
 
-type(cluster) function c_eq(c1)
+logical function c_eq(c1,c2)
 	implicit none
-	type(cluster), intent(in) :: c1
-	c_eq%defect = c1%defect
-	c_eq%solute = c1%solute
-	c_eq%mobile = c1%mobile
-	c_eq%ind    = c1%ind
+	type(cluster), intent(in) :: c1, c2
+	if ((c1%defect.eq.c2%defect) .and. (c1%solute.eq.c2%solute) .and. &
+		&(c1%mobile.eq.c2%mobile) .and. (c1%ind.eq.c2%ind)) then
+		c_eq = .True.
+	else
+		c_eq = .False.
+	end if
 end function c_eq	
 
+logical function c_ne(c1,c2)
+	implicit none
+	type(cluster), intent(in) :: c1, c2
+	if (.not.(c_eq(c1,c2))) then
+		c_ne = .True.
+	else
+		c_ne = .False.
+	end if
+end function c_ne
 
-		
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Utile ?
+
+
+subroutine c_assign(c1,c2)
+	implicit none
+	type(cluster), intent(out) :: c1
+	type(cluster), intent(in) :: c2
+	c1%defect = c2%defect
+	c1%solute = c2%solute
+	c1%mobile = c2%mobile
+	c1%ind = c2%ind
+end subroutine c_assign
+
+
 function I2C(ind)
 	implicit none
 	integer :: ind, p1, p2

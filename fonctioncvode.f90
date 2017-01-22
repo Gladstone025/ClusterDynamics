@@ -27,7 +27,7 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 	real(dp), dimension(-mv:mi) :: Cmob, bCnCmob, aCmob
 	real(dp), dimension(-mv:mi,0:ms) :: CmobSol, bCnCmobSol, aCmobSol
 	integer :: index_mob
-	type(cluster) :: C_nu, C_mu, C_mob, C_diff, C_null
+	type(cluster) :: C_nu, C_mu, C_mob, C_diff
 	type(cluster) :: MonoVac, MonoInter
 	MonoVac = cluster(-1._dp, 0._dp,.True.,0)
 	MonoVac%ind = C2I(MonoVac)
@@ -235,8 +235,6 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 		!aCmob = 0._dp
 		ConcP(1:Neq) = 0._dp
 		IER = 0
-		C_null = cluster(0._dp,0._dp,.False.)
-		C_null%ind = C2I(C_null)
 		! Dynamique amas immobiles
 		do nloop = 1, Neq
 			C_nu = Det(nloop)
