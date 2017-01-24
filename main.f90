@@ -650,6 +650,20 @@ call MPI_FINALIZE(ierror)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 case(5)
 
 
@@ -663,32 +677,242 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	! --- Initialisation du générateur aléatoire 
 	call init_random_seed
 	print *, "Initialisation"
-	Ni = Nf_Inter+Nb_Inter
-	Nv = Nf_Vac+Nb_Vac
-	Ns = Nf_Sol+Nb_Sol
-	Neq = (1 + Ni + Nv)*(1+Ns)
-	Nmaxi = 5000
-	Nmaxv = 1000
-	mv = 1
-	mi = 1
-	ms = 1
+	! --- Initialisation du solver
+	call init()
+	
 	allocate(C(Neq))
 	allocate(C_init(Neq))
-	allocate(C_stotodis(-Nv:Ni))
-	allocate(MPI_C_stotodis(-Nv:Ni))
+	allocate(C_stotodis(Neq))
+	allocate(MPI_C_stotodis(Neq))
 	allocate(C_sto(-2000:20000))
-	allocate(C_Inter(1:Ni))
-	allocate(C_Vac(1:Nv))
-	allocate(C_Mob(-mv:mi))
-	allocate(MPI_C_mob(-mv:mi))
-	allocate(bCn_sto(-mv:mi))
-	allocate(aCmob_sto(-mv:mi))
+	allocate(C_tot(-2000:20000))
+	allocate(C_Inter(Neq))
+	allocate(C_Vac(Neq))
+	allocate(C_Mob(Nmob))
+	allocate(MPI_C_mob(Nmob))
+	allocate(bCn_sto(Nmob))
+	allocate(aCmob_sto(Nmob))
 	
-	allocate(Alpha_tab(-Nmaxv:Nmaxi,-mv:mi))
-	allocate(Beta_tab(-Nmaxv:Nmaxi,-mv:mi))
+	allocate(Alpha_tab(-Nv:Ni,-mv:mi))
+	allocate(Beta_tab(-Nv:Ni,-mv:mi))
+	
+	do nloop = -Nv,Ni
+		do mloop = -mv,mi
+			Alpha_tab(nloop,mloop) = alpha_nm(real(nloop,8),real(mloop,8))
+			Beta_tab(nloop,mloop) = beta_nm(real(nloop,8),real(mloop,8))
+		end do 
+	end do
+	
+	do nloop = -10,10
+		do mloop = -mv, mi
+			print *, nloop, mloop, Alpha_tab(nloop,mloop), Beta_tab(nloop, mloop)
+		end do	
+	end do
+	
+	
+	call fnvinits(isolver,Neq,IER)
+	if (IER /= 0) then
+		write(*,*) 'ERROR in fnvinits'
+		stop
+	end if
+
+	T = 0._dp
+	T0 = 0._dp
+	TF = 100._dp
+	DeltaT = 100._dp
+	abstol = 1e-10_dp
+	reltol = 1e-5_dp
+	C_init = 0._dp
+
+	call fcvmalloc(T0,C_init,meth,itmeth,iatol,reltol,abstol,Iout,Rout,IPAR,RPAR,IER)
+	if (IER /= 0) then
+		write(*,*) 'ERROR in fcvmalloc', IER
+		stop
+	end if
+
+	maxerrfail = 15
+	nitermax = 10000
+
+	call fcvsetiin('MAX_NSTEPS',nitermax,IER)
+	call fcvsetiin('MAX_ERRFAIL',maxerrfail,IER)
+	if (IER /= 0) then
+		write(*,*) 'ERROR in fcvsetiin'
+		stop
+	end if
+
+	call fcvdense(Neq,IER)
+	if (IER /= 0) then
+		write(*,*) 'ERROR in fcvdense', IER
+		stop
+	end if
+
+	print *, "Initialisation : ok"
+
+	! --- Boucle principale solver+stochastique
+	
+	print *, "Boucle deterministe"
+	! --- On propage en full EDO jusqu'au critere d'arret
+	do while (Front_Inter(C) .and. Front_Vac(C))
+		call fcvode(TF,T,C,itask,IER)
+		call output(C,T)
+		TF = TF + DeltaT
+	end do
+	if (.not.Front_Inter(C)) then
+		print *, "INTERSTITIELS"
+		Coupling_Inter = .True.
+	end if
+	if (.not.Front_Vac(C)) then
+		Coupling_Vac = .True.
+		print *, "LACUNES"
+	end if
+	print *, "Boucle deterministe : ok"
+	
+	! --- On genere la partie stochastique et on restart avec la nouvelle CI sur C
+	
+	print *, "Initialisation boucle stochastique"
+
+	
+	if (Coupling_Inter) then
+		C_Inter = 0._dp
+		C_Inter(BuffI_Index) = C(BuffI_Index)
+		MStoInter = sum(C_Inter)
+		XpartInter = Multinomial_Clust(C_Inter,Taille) 
+		DeltaT = 100._dp!0.1_dp
+		TF = T+DeltaT
+	end if
+	if (Coupling_Vac) then		
+		C_Vac = 0._dp
+		C_Vac(BuffV_Index) = C(BuffV_Index)
+		MStoVac = sum(C_Vac)
+		XpartVac = Multinomial(C_Vac,Taille) 
+		DeltaT = 100._dp!0.1_dp
+		TF = T+DeltaT
+	end if
+	
+	C_init = 0._dp
+	C_Mob = 0._dp
+	C_Mob(Mob_Index) = C(Mob_Index)
+	C_init = C
+	if (Coupling_Inter) then
+		C_init(BuffI_Index) = 0._dp
+	end if
+	if (Coupling_Vac) then
+		C_init(BuffV_Index) = 0._dp
+	end if
+	
+	call FCVREINIT(T, C_init, iatol, reltol, abstol, IER)
+
+	print *, "Initialisation boucle stochastique : ok"
+	
+	! --- Boucle de couplage
+	do mainloop = 1, 2000
+		C_sto = 0._dp
+		
+		
+		
+		print *, "Calcul deterministe"
+		
+		call Amas_Sto
+		
+		
+		
+		print *, TF, T
+		call fcvode(TF,T,C,itask,IER)
+		print *, TF, T
+		print *, "Calcul deterministe : ok"
+		
+		C_Mob = 0._dp
+		C_Mob(Mob_Index) = C(Mob_Index)
+		
+		print *, "Calcul Langevin"
+		if (Coupling_Inter) then
+			call PropagationSto(XpartInter,C_Mob,DeltaT) 
+		end if
+		if (Coupling_Vac) then
+			call PropagationSto(XpartVac,C_Mob,DeltaT) 
+		end if
+		print *, "Calcul Langevin : ok"
+
+
+		TF = TF + DeltaT
+		dt_sto = max(0.1_dp,DeltaT/10._dp)
+
+
+		C_stotodis = 0._dp
+		if (Coupling_Inter) then
+			C_stotodis = StotoDiscret_Clust(XpartInter,1)
+			XpartInter = Sampling(C,XpartInter,1)
+			C_tot = MStoInter*C_sto/sum(C_sto)
+			C_sto = 0._dp
+		end if
+		if (Coupling_Vac) then
+			C_stotodis = StotoDiscret_Clust(XpartVac,-1)
+			XpartVac = Sampling(C,XpartVac,-1)
+			C_tot = MStoVac*C_sto/sum(C_sto)
+			C_sto = 0._dp
+		end if
+
+		print *, "MStoInter : ", MStoInter
+		
+		call MPI_REDUCE(C_stotodis,MPI_C_stotodis,Neq,MPI_DOUBLE_PRECISION,MPI_SUM,0, MPI_COMM_WORLD,ierror)
+		MPI_C_stotodis = MPI_C_stotodis/real(numproc,8)
+		call MPI_BCAST(MPI_C_stotodis,Neq,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierror)
+		C_stotodis = MPI_C_stotodis
+		
+		C_init = 0._dp
+		C_init = C + C_stotodis
+		C_sto(1:Neq) = C_init(1:Neq)
+		
+
+		if ((.not.Front_Inter(C)).and.(.not.Coupling_Inter)) then
+			Coupling_Inter = .True.
+			print *, "INTERSTITIELS"
+			C_Inter = 0._dp
+			C_Inter(BuffI_Index) = C(BuffI_Index)
+			MStoInter = sum(C_Inter)
+			XpartInter = Multinomial_Clust(C_Inter,Taille) 
+			DeltaT = 100._dp!0.1_dp
+			TF = T+DeltaT
+		end if
+		if ((.not.Front_Vac(C)).and.(.not.Coupling_Vac)) then
+			Coupling_Vac = .True.
+			print *, "LACUNES"
+			C_Vac = 0._dp
+			C_Vac(BuffV_Index) = C(BuffV_Index)
+			MStoVac = sum(C_Vac)
+			XpartVac = Multinomial_Clust(C_Vac,Taille) 
+			DeltaT = 100._dp!0.1_dp
+			TF = T+DeltaT
+		end if
+		
+		
+		if (rank.eq.0) then
+			call output(C_sto,T)
+		end if
+		call FCVREINIT(T, C_init, iatol, reltol, abstol, IER)
+	end do
+	
+	
+	deallocate(C)
+	deallocate(C_init)
+	deallocate(C_stotodis)
+	deallocate(MPI_C_stotodis)
+	deallocate(C_sto)
+	deallocate(C_Inter)
+	deallocate(C_Vac)
+	deallocate(C_Mob)
+	deallocate(MPI_C_Mob)
 
 	
 call MPI_FINALIZE(ierror)	
+
+
+
+
+
+
+
+
 
 
 end select

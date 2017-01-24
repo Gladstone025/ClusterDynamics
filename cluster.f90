@@ -11,7 +11,7 @@ type :: cluster
 	real(dp) :: defect
 	real(dp) :: solute
 	logical :: mobile = .False.
-	integer :: ind = 0
+	real(dp) :: ind = 0
 end type cluster
 
 interface operator (+)	
@@ -81,16 +81,16 @@ function IsInDomain(c)
 end function
 
 
-function C_init(n,s)
+function C_constructor(n,s)
 	implicit none
-	type(cluster) :: C_init
+	type(cluster) :: C_constructor
 	real(dp) :: n, s
 	integer :: ind
 	logical :: mob
-	C_init%defect = n
-	C_init%solute = s
-	C_init%mobile = IsMobile(n,s)
-	C_init%ind = C2I(C_init)
+	C_constructor%defect = n
+	C_constructor%solute = s
+	C_constructor%mobile = IsMobile(n,s)
+	C_constructor%ind = C2I(C_constructor)
 end function
 
 
@@ -116,7 +116,7 @@ logical function c_eq(c1,c2)
 	implicit none
 	type(cluster), intent(in) :: c1, c2
 	if ((c1%defect.eq.c2%defect) .and. (c1%solute.eq.c2%solute) .and. &
-		&(c1%mobile.eq.c2%mobile) .and. (c1%ind.eq.c2%ind)) then
+		&(c1%mobile.eqv.c2%mobile) .and. (c1%ind.eq.c2%ind)) then
 		c_eq = .True.
 	else
 		c_eq = .False.
@@ -148,7 +148,8 @@ end subroutine c_assign
 
 function I2C(ind)
 	implicit none
-	integer :: ind, p1, p2
+	integer :: ind
+	real(dp) :: p1, p2
 	type(cluster) :: I2C
 	p2 = int(ind/(1+Nv+Ni))
 	p1 = ind - p2*(1+Nv+Ni) - (Nv+1)

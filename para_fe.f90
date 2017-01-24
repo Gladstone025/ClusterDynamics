@@ -264,35 +264,35 @@ function D_fe(x,ConcMob)
 end function
 
 
-function F_Clust_Fe(C_nu,ConcMob)
-	implicit none
-	type(cluster) :: C_nu, C_mob
-	real(dp) :: rloop
-	real(dp) :: F_Clust_Fe
-	real(dp), dimension(:) :: ConcMob
-	integer :: mloop
-	F_Clust_Fe = 0._dp
-	do mloop = 1, Nmob
-		C_mob = Mob(mloop)
-		rloop = C_mob%defect
-		F_Clust_Fe = F_Clust_Fe + rloop*(Beta_Clust_Fe(C_nu,C_mob)*ConcMob(mloop) - Alpha_Clust_Fe(C_nu,C_mob))
-	end do
-end function
+!function F_Clust_Fe(C_nu,ConcMob)
+!	implicit none
+!	type(cluster) :: C_nu, C_mob
+!	real(dp) :: rloop
+!	real(dp) :: F_Clust_Fe
+!	real(dp), dimension(:) :: ConcMob
+!	integer :: mloop
+!	F_Clust_Fe = 0._dp
+!	do mloop = 1, Nmob
+!		C_mob = Mob(mloop)
+!		rloop = C_mob%defect
+!		F_Clust_Fe = F_Clust_Fe + rloop*(Beta_Clust_Fe(C_nu,C_mob)*ConcMob(mloop) - Alpha_Clust_Fe(C_nu,C_mob))
+!	end do
+!end function
 
-function D_Clust_Fe(C_nu,ConcMob)
-	implicit none
-	type(cluster) :: C_nu, C_mob
-	real(dp) :: rloop
-	real(dp) :: D_Clust_Fe
-	real(dp), dimension(:) :: ConcMob
-	integer :: mloop
-	D_Clust_Fe = 0._dp
-	do mloop = 1, Nmob
-		C_mob = Mob(mloop)
-		rloop = C_mob%defect
-		D_Clust_Fe = D_Clust_Fe + 0.5_dp*rloop*rloop*(Beta_Clust_Fe(C_nu,C_mob)*ConcMob(mloop) + Alpha_Clust_Fe(C_nu,C_mob))
-	end do
-end function
+!function D_Clust_Fe(C_nu,ConcMob)
+!	implicit none
+!	type(cluster) :: C_nu, C_mob
+!	real(dp) :: rloop
+!	real(dp) :: D_Clust_Fe
+!	real(dp), dimension(:) :: ConcMob
+!	integer :: mloop
+!	D_Clust_Fe = 0._dp
+!	do mloop = 1, Nmob
+!		C_mob = Mob(mloop)
+!		rloop = C_mob%defect
+!		D_Clust_Fe = D_Clust_Fe + 0.5_dp*rloop*rloop*(Beta_Clust_Fe(C_nu,C_mob)*ConcMob(mloop) + Alpha_Clust_Fe(C_nu,C_mob))
+!	end do
+!end function
 
 
 

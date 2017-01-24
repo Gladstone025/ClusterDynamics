@@ -244,16 +244,16 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 					! Flux nu-mu to nu
 					C_diff = C_nu-C_mob
 					if (IsInDomain(C_diff)) then
-						ConcP(C_nu%ind) = ConcP(C_nu%ind) + &
-										& Beta_clust(C_diff,C_mob)*Conc(C_diff%ind)*Conc(C_mob%ind) - &
-										& Alpha_clust(C_nu,C_mob)*Conc(C_nu%ind)
+						ConcP(nint(C_nu%ind)) = ConcP(nint(C_nu%ind)) + &
+										& Beta_clust(C_diff,C_mob)*Conc(nint(C_diff%ind))*Conc(nint(C_mob%ind)) - &
+										& Alpha_clust(C_nu,C_mob)*Conc(nint(C_nu%ind))
 					end if
 					! Flux nu to nu+mu
 					C_diff = C_nu+C_mob
 					if (IsInDomain(C_diff)) then
-						ConcP(C_nu%ind) = ConcP(C_nu%ind) - &
-										& Beta_clust(C_nu,C_mob)*Conc(C_nu%ind)*Conc(C_mob%ind) + &
-										& Alpha_clust(C_diff,C_mob)*Conc(C_diff%ind)
+						ConcP(nint(C_nu%ind)) = ConcP(nint(C_nu%ind)) - &
+										& Beta_clust(C_nu,C_mob)*Conc(nint(C_nu%ind))*Conc(nint(C_mob%ind)) + &
+										& Alpha_clust(C_diff,C_mob)*Conc(nint(C_diff%ind))
 					end if
 				end do
 			end if
@@ -261,28 +261,28 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 		! Dynamique amas mobiles
 		do nloop = 1, Nmob
 			C_nu = Mob(nloop)
-			ConcP(C_nu%ind) = 0._dp
+			ConcP(nint(C_nu%ind)) = 0._dp
 			do mloop = 1, Nmob
 				C_mob = Mob(mloop)
 				! Flux nu-mu to nu sur mobiles M_nu
 				C_diff = C_nu-C_mob
 				if (IsInDomain(C_diff)) then
-					ConcP(C_nu%ind) = ConcP(C_nu%ind) + &
-									& Beta_clust(C_diff,C_mob)*Conc(C_diff%ind)*Conc(C_mob%ind) - &
-									& Alpha_clust(C_nu,C_mob)*Conc(C_nu%ind) 
+					ConcP(nint(C_nu%ind)) = ConcP(nint(C_nu%ind)) + &
+									& Beta_clust(C_diff,C_mob)*Conc(nint(C_diff%ind))*Conc(nint(C_mob%ind)) - &
+									& Alpha_clust(C_nu,C_mob)*Conc(nint(C_nu%ind)) 
 				end if	
 				! Flux nu to nu+mu sur mobiles M
 				C_diff = C_nu+C_mob	
 				if (IsInDomain(C_diff)) then		 
-					ConcP(C_nu%ind) = ConcP(C_nu%ind) - &
-									 & Beta_clust(C_nu,C_mob)*Conc(C_nu%ind)*Conc(C_mob%ind) + &
-									 & Alpha_clust(C_diff,C_mob)*Conc(C_diff%ind)				
+					ConcP(nint(C_nu%ind)) = ConcP(nint(C_nu%ind)) - &
+									 & Beta_clust(C_nu,C_mob)*Conc(nint(C_nu%ind))*Conc(nint(C_mob%ind)) + &
+									 & Alpha_clust(C_diff,C_mob)*Conc(nint(C_diff%ind))				
 				end if
 				! Forces de puits
 				if (C_nu%defect.eq.1) then
-					Si = Si + Beta_Clust(MonoVac,C_mob)*Conc(C_mob%ind)
+					Si = Si + Beta_Clust(MonoVac,C_mob)*Conc(nint(C_mob%ind))
 				else if (C_nu%defect.eq.-1) then
-					Sv = Sv + Beta_Clust(MonoInter,C_mob)*Conc(C_mob%ind)
+					Sv = Sv + Beta_Clust(MonoInter,C_mob)*Conc(nint(C_mob%ind))
 				end if
 			end do
 			do mloop = 1, Neq
@@ -290,15 +290,15 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 				C_mu = Det(mloop)
 				C_diff = C_nu+C_mu	
 				if (IsInDomain(C_diff)) then
-					ConcP(C_nu%ind) = ConcP(C_nu%ind) - &
-									& Beta_clust(C_mu,C_nu)*Conc(C_nu%ind)*Conc(C_mu%ind) + &
-									& Alpha_clust(C_diff,C_nu)*Conc(C_diff%ind)
+					ConcP(nint(C_nu%ind)) = ConcP(nint(C_nu%ind)) - &
+									& Beta_clust(C_mu,C_nu)*Conc(nint(C_nu%ind))*Conc(nint(C_mu%ind)) + &
+									& Alpha_clust(C_diff,C_nu)*Conc(nint(C_diff%ind))
 				end if
 				! Forces de puits
 				if (C_nu%defect.eq.1) then
-					Si = Si + Beta_Clust(C_mu,MonoInter)*Conc(C_mu%ind)
+					Si = Si + Beta_Clust(C_mu,MonoInter)*Conc(nint(C_mu%ind))
 				else if (C_nu%defect.eq.-1) then
-					Sv = Sv + Beta_Clust(C_mu,MonoVac)*Conc(C_mu%ind)
+					Sv = Sv + Beta_Clust(C_mu,MonoVac)*Conc(nint(C_mu%ind))
 				end if
 			end do
 		end do
@@ -307,14 +307,14 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 			ConcP(nloop) = ConcP(nloop) + G_source(nloop)
 		end do
 		! Ajout des forces de puits
-		Si = Si - 2._dp*Beta_Clust(MonoInter,MonoInter)*Conc(MonoInter%ind)
-		Sv = Sv - 2._dp*Beta_Clust(MonoVac,MonoVac)*Conc(MonoVac%ind)
-		ConcP(MonoInter%ind) = ConcP(MonoInter%ind) - Z_i*rho_d*D_i*(Conc(MonoInter%ind) - Ci_eq) - &
-											&6._dp/l_gb*sqrt(Z_i*rho_d+Si/D_i)*D_i*(Conc(MonoInter%ind) - Ci_eq)
-		ConcP(MonoVac%ind) = ConcP(MonoVac%ind) - Z_v*rho_d*D_v*(Conc(MonoVac%ind) - Cv_eq) - &
-											&6._dp/l_gb*sqrt(Z_v*rho_d+Sv/D_v)*D_v*(Conc(MonoVac%ind) - Cv_eq)
+		Si = Si - 2._dp*Beta_Clust(MonoInter,MonoInter)*Conc(nint(MonoInter%ind))
+		Sv = Sv - 2._dp*Beta_Clust(MonoVac,MonoVac)*Conc(nint(MonoVac%ind))
+		ConcP(nint(MonoInter%ind)) = ConcP(nint(MonoInter%ind)) - Z_i*rho_d*D_i*(Conc(nint(MonoInter%ind)) - Ci_eq) - &
+											&6._dp/l_gb*sqrt(Z_i*rho_d+Si/D_i)*D_i*(Conc(nint(MonoInter%ind)) - Ci_eq)
+		ConcP(nint(MonoVac%ind)) = ConcP(nint(MonoVac%ind)) - Z_v*rho_d*D_v*(Conc(nint(MonoVac%ind)) - Cv_eq) - &
+											&6._dp/l_gb*sqrt(Z_v*rho_d+Sv/D_v)*D_v*(Conc(nint(MonoVac%ind)) - Cv_eq)
 		! Gestion de (0,0)
-		ConcP(C_null%ind) = 0._dp
+		ConcP(nint(C_null%ind)) = 0._dp
 		print *, T
 	else
 		print *, "Cas physique inexistant"

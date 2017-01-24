@@ -21,12 +21,14 @@ subroutine init()
 	integer :: nloop, mloop, mobloop, sloop, iloop
 	real(dp) :: rn, rm, rmob, rs
 	type(cluster) :: MonoInter, MonoVac, MonoSol, clust
-	!Ni = Nf_Inter+Nb_Inter
-	!Nv = Nf_Vac+Nb_Vac
+	Ni = Nf_Inter+Nb_Inter
+	Nv = Nf_Vac+Nb_Vac
+	NS = 0
 	!Ns = Nf_Sol+Nb_Sol
 	
-	!mi = 1
-	!mv = 1
+	mi = 1
+	mv = 1
+	ms = 0
 	!ms = 1
 	
 	Neq = (1+Ni+Nv)*(1+Ns)
@@ -44,7 +46,7 @@ subroutine init()
 	Mob(1) = MonoInter
 	Mob(2) = MonoVac
 	!Mob(3) = MonoSol
-	Mob_index(1) ⁼ MonoInter%ind
+	Mob_index(1) = MonoInter%ind
 	Mob_index(2) = MonoVac%ind
 	!Mob_index(3) = MonoSol%ind
 	
@@ -118,6 +120,14 @@ subroutine init()
 		end do	
 	end do
 	print *, "NbuffV", iloop, NbuffV
+	
+	Nbound = 1
+	allocate(FrontI_Index(Nbound))
+	allocate(FrontV_Index(Nbound))
+	clust = c_constructor(real(Nf_Inter,8),0._dp)
+	FrontI_Index(Nbound) = int(clust%ind)
+	clust = c_constructor(real(Nf_Vac,8),0._dp)
+	FrontV_Index(Nbound) = int(clust%ind)
 
 
 end subroutine init

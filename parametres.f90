@@ -22,8 +22,11 @@ integer, parameter :: Nb_Vac = 50
 integer, parameter :: Nf_Sol = 200
 integer, parameter :: Nb_Sol = 50
 
+integer :: Nbound
+
 type(cluster), dimension(:), allocatable :: Mob, Det
-real(dp), dimension(:), allocatable :: Mob_Index, Det_Index, BuffI_Index, BuffV_Index
+integer, dimension(:), allocatable :: Mob_Index, Det_Index, BuffI_Index, BuffV_Index
+integer, dimension(:), allocatable :: FrontI_Index, FrontV_Index
 real(dp), dimension(:), allocatable :: G_source
 
 integer, parameter :: Nf_EL_Inter = 50
@@ -72,7 +75,7 @@ integer, parameter :: Taille = 50000
 real(dp), dimension(Taille) :: Xpart = 0._dp
 real(dp), dimension(Taille) :: XpartInter = 0._dp
 real(dp), dimension(Taille) :: XpartVac = 0._dp
-real(dp), dimension(:), allocatable :: C_sto
+real(dp), dimension(:), allocatable :: C_sto, C_tot
 
 real(dp) :: bCnCi_sto, aCi_sto, Si_sto
 real(dp) :: bCnCv_sto, aCv_sto, Sv_sto

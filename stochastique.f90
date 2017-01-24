@@ -197,7 +197,7 @@ function Langevin1part_Clust(C_nu,ConcMob,Tfinal)
 		end do
 	end if
 	Langevin1part_Clust = cluster(x,s,.False.,0)
-	Langevin1part_Clust%ind = C2I(x,s)
+	Langevin1part_Clust%ind = C2I(Langevin1part_Clust)
 end function Langevin1part_Clust
 
 
@@ -283,7 +283,7 @@ function EKMC1part_Clust(C_nu,ConcMob,Tfinal)
 		C1 = ConcMob(1)
 		dte = 0.d0
 		do while (dte < Tfinal)
-			pos = EKMC1part
+			pos = x
 			nue = beta(pos)*C1+alpha(pos)
 			call tirage_exp(expe,nue)
 			dte = dte + expe
@@ -332,7 +332,7 @@ function EKMC1part_Clust(C_nu,ConcMob,Tfinal)
 		deallocate(p)
 	end if
 	EKMC1part_Clust = cluster(x,s,.False.,0)
-	EKMC1part_Clust%ind = C2I(x,s)
+	EKMC1part_Clust%ind = C2I(EKMC1part_Clust)
 end function EKMC1part_Clust
 
 
@@ -364,7 +364,7 @@ subroutine PropagationSto_Clust(HLangevin,ConcMob,Tfinal)
 			HLangevin(iloop) = Langevin1part_Clust(HLangevin(iloop),ConcMob,Tfinal)
 		else
 			HLangevin(iloop)%defect = real(nint(HLangevin(iloop)%defect),8)
-			HLangevin(iloop) = EKMC1part(HLangevin(iloop),ConcMob,Tfinal)
+			HLangevin(iloop) = EKMC1part_Clust(HLangevin(iloop),ConcMob,Tfinal)
 		end if
 	end do
 end subroutine PropagationSto_Clust
@@ -561,12 +561,12 @@ function InBoundary_Clust(C_nu, IVS)
 		end if
 	! - Cas general - Interstitiels+Solutes
 	case(1)
-		if (C_nu%defect < Nf_Inter .and. C_nu%solutes < Nf_Sol) then
+		if (C_nu%defect < Nf_Inter .and. C_nu%solute < Nf_Sol) then
 			InBoundary_Clust = .True.
 		end if
 	! - Cas general - Vacancies+Solutes
 	case(-1) 
-		if (C_nu%defect > -Nf_Vac .and. C_nu%solutes < Nf_Sol) then
+		if (C_nu%defect > -Nf_Vac .and. C_nu%solute < Nf_Sol) then
 			InBoundary_Clust = .True.
 		end if
 	end select
@@ -692,8 +692,8 @@ function StotoDiscret_Clust(HLangevin,IVS)
 			n = nint(HLangevin(iloop)%defect)
 			s = nint(HLangevin(iloop)%solute)
 			ninf = ninf + 1
-			C_nu = C_init(real(n,8),real(s,8))
-			Conc(C_nu%ind) = Conc(C_nu%ind) + 1._dp	
+			C_nu = C_constructor(real(n,8),real(s,8))
+			Conc(nint(C_nu%ind)) = Conc(nint(C_nu%ind)) + 1._dp	
 		end if
 	end do
 	if (IVS.eq.0) then
@@ -797,7 +797,7 @@ function Sampling_Clust(Conc,HLangevin,IVS)
 			call random_number(u)
 			nn = int(u*compt)+1
 			Sampling_Clust(iloop) = Sampling_Clust(nn)
-			nsto = nint(Sampling(iloop)%ind)
+			nsto = nint(Sampling_Clust(iloop)%ind)
 			C_sto(nsto) = C_sto(nsto) + 1._dp	
 		enddo
 	else ! -- il faut supprimer des particules
@@ -841,21 +841,20 @@ end function Sampling_Clust
 
 
 
-function Sampling(Conc,HLangevin,IVS)
+function Sampling(Conc,HLangevin,InterVac)
 	implicit none
-	integer :: IVS
+	integer :: InterVac
 	integer :: iloop, kloop
 	real(dp), dimension(:) :: Conc
-	type(cluster), dimension(:) :: HLangevin
+	real(dp), dimension(:) :: HLangevin
 	real(dp), dimension(:), allocatable :: Conc_buff
-	type(cluster), dimension(size(HLangevin)) :: Sampling
-	type(cluster), dimension(:), allocatable :: Htot, Hsto
-	type(cluster), dimension(:), allocatable :: Sampling_inter
+	real(dp), dimension(size(HLangevin)) :: Sampling
+	real(dp), dimension(:), allocatable :: Htot, Hsto
+	real(dp), dimension(:), allocatable :: Sampling_inter
 	integer :: Nconc, Npart, Ninf, Ndiff
 	integer :: compt, nn, nsto
 	real(dp) :: Mconc, Mlangevin
 	real(dp) :: a, u
-	type(cluster) :: C_nu
 	! -- On initialise
 	Ninf = 0
 	compt = 0
@@ -1044,6 +1043,76 @@ function Mtail(Conc,ninf,nmax)
 		Mtail = Mtail + iloop*Conc(iloop)
 	end do
 end function
+
+
+
+
+function Front_Inter(Conc)
+	implicit none
+	integer :: nloop
+	type(cluster), dimension(:) :: Conc
+	logical :: Front_Inter
+	Front_Inter = .True.
+	do nloop = 1, Nbound
+		if (Conc(FrontI_Index) > 1.e-2*Conc(int(MonoInter%ind))) then
+			Front_Inter = .False.
+		end if
+	end do
+end function
+
+
+function Front_Vac(Conc)
+	implicit none
+	integer :: nloop
+	type(cluster), dimension(:) :: Conc
+	logical :: Front_Vac
+	Front_Vac = .True.
+	do nloop = 1, Nbound
+		if (Conc(FrontV_Index) > 1.e-2*Conc(int(MonoVac%ind))) then
+			Front_Vac = .False.
+		end if
+	end do
+end function
+
+
+
+! Somme sur les amas stochastiques
+subroutine Amas_Sto
+	implicit none
+	type(cluster) :: C_mob, C_diff
+	bCn_sto = 0._dp
+	aCmob_sto = 0._dp
+	Si_sto = 0._dp
+	Sv_sto = 0._dp
+	if (Coupling_Inter) then	
+		do iloop = 1, Taille
+			do mloop = 1, Nmob
+				C_mob = c_constructor(real(mloop,8),0._dp)
+				C_diff = C_mob+XpartInter(iloop)
+				rloop = real(mloop,8)
+				bCn_sto(mloop) = bCn_sto(mloop) - MStoInter/Taille*Beta_Clust_Fe(XpartInter(iloop),C_mob)
+				aCmob_sto(mloop) = aCmob_sto(mloop) + MStoInter/Taille*Alpha_Clust_Fe(C_diff,C_mob) 
+			end do
+			Si_sto = Si_sto + MStoInter/Taille*Beta_Clust_Fe(XpartInter(iloop),MonoInter)
+			Sv_sto = Sv_sto + MStoInter/Taille*Beta_Clust_Fe(XpartInter(iloop),MonoVac)
+		enddo
+	end if
+	if (Coupling_Vac) then
+		do iloop = 1, Taille
+			do mloop = 1, Nmob
+				C_mob = c_constructor(real(mloop,8),0._dp)
+				C_diff = C_mob+XpartInter(iloop)
+				bCn_sto(mloop) = bCn_sto(mloop) - MStoVac/Taille*Beta_Clust_Fe(XpartVac(iloop),C_mob)
+				aCmob_sto(mloop) = aCmob_sto(mloop) + MStoVac/Taille*Alpha_Clust_Fe(C_diff,C_mob) 
+			end do
+			Si_sto = Si_sto + MStoVac/Taille*Beta_Clust_Fe(XpartVac(iloop),MonoInter)
+			Sv_sto = Sv_sto + MStoVac/Taille*Beta_Clust_Fe(XpartVac(iloop),MonoVac)
+		enddo
+	end if
+end subroutine Amas_Sto
+
+
+
 
 end module stochastique
 
