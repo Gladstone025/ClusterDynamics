@@ -12,6 +12,7 @@ implicit none
 
 integer :: mainloop, nloop, mloop, iloop, jloop
 real(dp) :: Mtemp, nue
+real(dp) :: x, y
 
 namelist /parameter/etape,dt_sto,methode,cas_physique
 
@@ -331,8 +332,8 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	Neq = 1 + Ni + Nv
 	Nmaxi = 5000
 	Nmaxv = 1000
-	mv = 4
-	mi = 3
+	mv = 1
+	mi = 1
 	allocate(C(Neq))
 	allocate(C_init(Neq))
 	allocate(C_stotodis(-Nv:Ni))
@@ -755,6 +756,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	do while (Front_Inter(C) .and. Front_Vac(C))
 		call fcvode(TF,T,C,itask,IER)
 		call output(C,T)
+		print *, "Time : ", TF
 		TF = TF + DeltaT
 	end do
 	if (.not.Front_Inter(C)) then
@@ -776,7 +778,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 		C_Inter = 0._dp
 		C_Inter(BuffI_Index) = C(BuffI_Index)
 		MStoInter = sum(C_Inter)
-		XpartInter = Multinomial_Clust(C_Inter,Taille) 
+		XpartInter_Clust = Multinomial_Clust(C_Inter,Taille) 
 		DeltaT = 100._dp!0.1_dp
 		TF = T+DeltaT
 	end if
@@ -784,14 +786,14 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 		C_Vac = 0._dp
 		C_Vac(BuffV_Index) = C(BuffV_Index)
 		MStoVac = sum(C_Vac)
-		XpartVac = Multinomial(C_Vac,Taille) 
+		XpartVac_Clust = Multinomial_Clust(C_Vac,Taille) 
 		DeltaT = 100._dp!0.1_dp
 		TF = T+DeltaT
 	end if
 	
 	C_init = 0._dp
 	C_Mob = 0._dp
-	C_Mob(Mob_Index) = C(Mob_Index)
+	C_Mob = C(Mob_Index)
 	C_init = C
 	if (Coupling_Inter) then
 		C_init(BuffI_Index) = 0._dp
@@ -805,16 +807,14 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 	print *, "Initialisation boucle stochastique : ok"
 	
 	! --- Boucle de couplage
-	do mainloop = 1, 2000
+	do mainloop = 1, 20
 		C_sto = 0._dp
-		
+		C_tot = 0._dp
 		
 		
 		print *, "Calcul deterministe"
 		
-		call Amas_Sto
-		
-		
+		call Amas_Sto	
 		
 		print *, TF, T
 		call fcvode(TF,T,C,itask,IER)
@@ -822,14 +822,14 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 		print *, "Calcul deterministe : ok"
 		
 		C_Mob = 0._dp
-		C_Mob(Mob_Index) = C(Mob_Index)
+		C_Mob = C(Mob_Index)
 		
 		print *, "Calcul Langevin"
 		if (Coupling_Inter) then
-			call PropagationSto(XpartInter,C_Mob,DeltaT) 
+			call PropagationSto_Clust(XpartInter_Clust,C_Mob,DeltaT) 
 		end if
 		if (Coupling_Vac) then
-			call PropagationSto(XpartVac,C_Mob,DeltaT) 
+			call PropagationSto_Clust(XpartVac_Clust,C_Mob,DeltaT) 
 		end if
 		print *, "Calcul Langevin : ok"
 
@@ -838,16 +838,26 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 		dt_sto = max(0.1_dp,DeltaT/10._dp)
 
 
+		!******
+		!C_init = C
+		!C_init(BuffI_Index) = 0._dp
+		!C_init(BuffV_Index) = 0._dp
+		
+		!******
+
+
+
+
 		C_stotodis = 0._dp
 		if (Coupling_Inter) then
-			C_stotodis = StotoDiscret_Clust(XpartInter,1)
-			XpartInter = Sampling(C,XpartInter,1)
+			C_stotodis = StotoDiscret_Clust(XpartInter_Clust,1)
+			XpartInter_Clust = Sampling_Clust(C,XpartInter_Clust,1) !****
 			C_tot = MStoInter*C_sto/sum(C_sto)
 			C_sto = 0._dp
 		end if
 		if (Coupling_Vac) then
-			C_stotodis = StotoDiscret_Clust(XpartVac,-1)
-			XpartVac = Sampling(C,XpartVac,-1)
+			C_stotodis = StotoDiscret_Clust(XpartVac_Clust,-1)
+			XpartVac_Clust = Sampling_Clust(C,XpartVac_Clust,-1)
 			C_tot = MStoVac*C_sto/sum(C_sto)
 			C_sto = 0._dp
 		end if
@@ -861,7 +871,13 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 		
 		C_init = 0._dp
 		C_init = C + C_stotodis
-		C_sto(1:Neq) = C_init(1:Neq)
+		if (Coupling_Inter) then
+			C_init(BuffI_Index) = 0._dp
+		end if
+		if (Coupling_Vac) then
+			C_init(BuffV_Index) = 0._dp
+		end if
+		C_tot(1:Neq) = C_tot(1:Neq) + C_init(1:Neq)
 		
 
 		if ((.not.Front_Inter(C)).and.(.not.Coupling_Inter)) then
@@ -870,7 +886,7 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 			C_Inter = 0._dp
 			C_Inter(BuffI_Index) = C(BuffI_Index)
 			MStoInter = sum(C_Inter)
-			XpartInter = Multinomial_Clust(C_Inter,Taille) 
+			XpartInter_Clust = Multinomial_Clust(C_Inter,Taille) 
 			DeltaT = 100._dp!0.1_dp
 			TF = T+DeltaT
 		end if
@@ -880,14 +896,14 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 			C_Vac = 0._dp
 			C_Vac(BuffV_Index) = C(BuffV_Index)
 			MStoVac = sum(C_Vac)
-			XpartVac = Multinomial_Clust(C_Vac,Taille) 
+			XpartVac_Clust = Multinomial_Clust(C_Vac,Taille) 
 			DeltaT = 100._dp!0.1_dp
 			TF = T+DeltaT
 		end if
 		
 		
 		if (rank.eq.0) then
-			call output(C_sto,T)
+			call output(C_tot,TF-DeltaT)
 		end if
 		call FCVREINIT(T, C_init, iatol, reltol, abstol, IER)
 	end do
@@ -905,7 +921,6 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD,numproc,ierror)
 
 	
 call MPI_FINALIZE(ierror)	
-
 
 
 

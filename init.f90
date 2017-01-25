@@ -62,64 +62,46 @@ subroutine init()
 				clust%mobile = .True.
 			end if
 			clust%ind = C2I(clust)
-			Det(clust%ind) = clust
+			Det(nint(clust%ind)) = clust
 			if (nloop.eq.-8) then
-				G_source(clust%ind) = G_8v
+				G_source(nint(clust%ind)) = G_8v
 			else if (nloop.eq.-1) then
-				G_source(clust%ind) = G_v
+				G_source(nint(clust%ind)) = G_v
 			else if (nloop.eq.1) then
-				G_source(clust%ind) = G_i
+				G_source(nint(clust%ind)) = G_i
 			else if (nloop.eq.4) then
-				G_source(clust%ind) = G_4i
+				G_source(nint(clust%ind)) = G_4i
 			end if
 		end do	
 	end do
 	
-	NbuffI = (Nb_Inter+1)*Nf_Sol + (Nb_Sol+1)*(Ni+1)
+
+	NbuffI = Nb_Inter+1
 	allocate(BuffI_Index(NbuffI))
 	iloop = 0
 	do nloop = 0, Ni
-		do sloop = 0, Ns
-			rn = real(nloop,8)
-			rs = real(sloop,8)
-			clust = cluster(rn,rs,.False.)
-			if (IsMobile(rn,rs)) then
-				clust%mobile = .True.
-			end if
-			clust%ind = C2I(clust)
-			if (rn.le.Ni .and. rn.ge.Nf_Inter .and. rs < Nf_Sol) then
-				iloop = iloop+1
-				BuffI_Index(iloop) = clust%ind
-			else if (rs.le.Ns .and. rs.ge.Nf_Sol .and. rn.le.Ni) then
-				iloop = iloop+1
-				BuffI_Index(iloop) = clust%ind
-			end if
-		end do	
+		rn = real(nloop,8)
+		clust = c_constructor(rn,0._dp)
+		if (rn.le.Ni .and. rn.ge.Nf_Inter) then
+			iloop = iloop+1
+			BuffI_Index(iloop) = nint(clust%ind)
+		end if
 	end do
 	print *, "NbuffI", iloop, NbuffI
 
-	NbuffV = (Nb_Vac+1)*Nf_Sol + (Nb_Sol+1)*Nv
-	allocate(BuffI_Index(NbuffI))
+	NbuffV = Nb_Vac+1 
+	allocate(BuffV_Index(NbuffV))
 	iloop = 0
 	do nloop = -Nv, -1
-		do sloop = 0, Ns
-			rn = real(nloop,8)
-			rs = real(sloop,8)
-			clust = cluster(rn,rs,.False.)
-			if (IsMobile(rn,rs)) then
-				clust%mobile = .True.
-			end if
-			clust%ind = C2I(clust)
-			if (rn.ge.-Nv .and. rn.le.Nf_Vac .and. rs < Nf_Sol) then
-				iloop = iloop+1
-				BuffV_Index(iloop) = clust%ind
-			else if (rs.le.Ns .and. rs.ge.Nf_Sol .and. rn.ge.Nv) then
-				iloop = iloop+1
-				BuffV_Index(iloop) = clust%ind
-			end if
-		end do	
+		rn = real(nloop,8)
+		clust = c_constructor(rn,0._dp)
+		if (rn.ge.-Nv .and. rn.le.-Nf_Vac) then
+			iloop = iloop+1
+			BuffV_Index(iloop) = nint(clust%ind)
+		end if
 	end do
 	print *, "NbuffV", iloop, NbuffV
+		
 	
 	Nbound = 1
 	allocate(FrontI_Index(Nbound))
@@ -133,6 +115,63 @@ subroutine init()
 end subroutine init
 
 
+
+
+
+subroutine init_FeHe
+
+implicit none
+	integer :: nloop, mloop, mobloop, sloop, iloop
+	real(dp) :: rn, rm, rmob, rs
+	type(cluster) :: MonoInter, MonoVac, MonoSol, clust
+	NbuffI = Nb_Inter+1 !(Nb_Inter+1)*Nf_Sol + (Nb_Sol+1)*(Ni+1)
+		allocate(BuffI_Index(NbuffI))
+		iloop = 0
+		do nloop = 0, Ni
+			do sloop = 0, Ns
+				rn = real(nloop,8)
+				rs = real(sloop,8)
+				clust = cluster(rn,rs,.False.)
+				if (IsMobile(rn,rs)) then
+					clust%mobile = .True.
+				end if
+				clust%ind = C2I(clust)
+				if (rn.le.Ni .and. rn.ge.Nf_Inter .and. rs < Nf_Sol) then
+					iloop = iloop+1
+					BuffI_Index(iloop) = nint(clust%ind)
+				else if (rs.le.Ns .and. rs.ge.Nf_Sol .and. rn.le.Ni) then
+					iloop = iloop+1
+					BuffI_Index(iloop) = nint(clust%ind)
+				end if
+			end do	
+		end do
+		print *, "NbuffI", iloop, NbuffI
+
+		NbuffV = Nb_Vac+1 !(Nb_Vac+1)*Nf_Sol + (Nb_Sol+1)*Nv
+		allocate(BuffV_Index(NbuffV))
+		iloop = 0
+		do nloop = -Nv, -1
+			do sloop = 0, Ns
+				rn = real(nloop,8)
+				rs = real(sloop,8)
+				clust = cluster(rn,rs,.False.)
+				if (IsMobile(rn,rs)) then
+					clust%mobile = .True.
+				end if
+				clust%ind = C2I(clust)
+				if (rn.ge.-Nv .and. rn.le.Nf_Vac .and. rs < Nf_Sol) then
+					iloop = iloop+1
+					BuffV_Index(iloop) = nint(clust%ind)
+				else if (rs.le.Ns .and. rs.ge.Nf_Sol .and. rn.ge.Nv) then
+					iloop = iloop+1
+					BuffV_Index(iloop) = nint(clust%ind)
+				end if
+			end do	
+		end do
+		print *, "NbuffV", iloop, NbuffV
+
+
+end subroutine init_FeHe
 
 
 

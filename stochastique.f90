@@ -173,7 +173,7 @@ end function Langevin1part
 function Langevin1part_Clust(C_nu,ConcMob,Tfinal)
 	implicit none
 	integer :: K, kloop
-	type(cluster) :: C_nu, Langevin1part_Clust
+	type(cluster) :: C_nu, C_inter, Langevin1part_Clust
 	real(dp) :: x, s
 	real(dp) :: C1
 	real(dp) :: Tfinal
@@ -194,6 +194,12 @@ function Langevin1part_Clust(C_nu,ConcMob,Tfinal)
 		do kloop = 1, K
 			call gen_rand_normal(G,1)
 			x = x + dt_sto*(F_fe(x,ConcMob)) + sqrtdt*sqrt(D_fe(x,ConcMob))*G(1)
+		end do
+	else if (cas_physique.eq.3) then
+		do kloop = 1, K
+			call gen_rand_normal(G,1)
+			C_inter = c_constructor(x,0._dp)
+			x = x + dt_sto*(F_Clust_Fe(C_inter,ConcMob)) + sqrtdt*sqrt(D_Clust_Fe(C_inter,ConcMob))*G(1)
 		end do
 	end if
 	Langevin1part_Clust = cluster(x,s,.False.,0)
@@ -270,7 +276,7 @@ end function EKMC1part
 function EKMC1part_Clust(C_nu,ConcMob,Tfinal)
 	implicit none
 	integer :: mloop
-	type(cluster) :: C_nu, EKMC1part_Clust
+	type(cluster) :: C_nu, C_diff, C_mob, EKMC1part_Clust
 	real(dp), dimension(:) :: ConcMob
 	real(dp) :: x, s
 	real(dp) :: Tfinal, C1
@@ -330,8 +336,41 @@ function EKMC1part_Clust(C_nu,ConcMob,Tfinal)
 			endif
 		enddo
 		deallocate(p)
+	else if (cas_physique.eq.3) then
+		allocate(p(1:Nmob))
+		dte = 0.d0
+		do while (dte < Tfinal)
+			pos = x
+			nue = 0._dp
+			do mloop = 1, Nmob
+				C_mob = Mob(mloop)
+				C_diff = C_null - C_mob
+				nue = nue + Beta_Clust_Fe(C_nu,C_mob)*ConcMob(mloop)+Alpha_Clust_Fe(C_nu,C_diff)
+			end do
+			call tirage_exp(expe,nue)
+			dte = dte + expe
+			if (dte < Tfinal) then
+				! Pour les probas, on fait gaffe : beta_(n,i/v)C_i/v + alpha_(n,v/i) 
+				! Penser a computer Alpha_tab et Beta_tab sur -max(mv,mi),max(mv,mi) avec zero pour les inexistants
+				do mloop = 1, Nmob
+					C_mob = Mob(mloop)
+					C_diff = C_null - C_mob
+					p(mloop) = (Beta_Clust_Fe(C_nu,C_mob)*ConcMob(mloop)+Alpha_Clust_Fe(C_nu,C_diff))/nue ! Attention "-1.*Cmob ?"
+				end do
+				call random_number(u)
+				s = 0
+				do mloop = 1, Nmob
+					s = s + p(mloop)
+					if (s > u) then 
+						x = x + real(Mob(mloop)%defect,8)
+						exit
+					endif
+				end do
+			endif
+		enddo
+		deallocate(p)
 	end if
-	EKMC1part_Clust = cluster(x,s,.False.,0)
+	EKMC1part_Clust = cluster(x,0._dp,.False.,0)
 	EKMC1part_Clust%ind = C2I(EKMC1part_Clust)
 end function EKMC1part_Clust
 
@@ -356,15 +395,18 @@ end subroutine PropagationSto
 subroutine PropagationSto_Clust(HLangevin,ConcMob,Tfinal)
 	implicit none
 	integer :: iloop
-	real(dp) :: Tfinal
+	real(dp) :: Tfinal, x
 	real(dp), dimension(:) :: ConcMob
+	type(cluster) :: C_nu
 	type(cluster), dimension(:) :: HLangevin
 	do iloop = 1, size(HLangevin)
 		if ((HLangevin(iloop)%defect > Nf_Inter+Nf_EL_Inter) .or. (HLangevin(iloop)%defect < -(Nf_Vac+Nf_EL_Vac))) then
 			HLangevin(iloop) = Langevin1part_Clust(HLangevin(iloop),ConcMob,Tfinal)
 		else
-			HLangevin(iloop)%defect = real(nint(HLangevin(iloop)%defect),8)
+			!HLangevin(iloop)%defect = real(nint(HLangevin(iloop)%defect),8)
+			!print *, "1 : ", HLangevin(iloop)
 			HLangevin(iloop) = EKMC1part_Clust(HLangevin(iloop),ConcMob,Tfinal)
+			!print *, "2 : ", HLangevin(iloop)
 		end if
 	end do
 end subroutine PropagationSto_Clust
@@ -710,6 +752,7 @@ function StotoDiscret_Clust(HLangevin,IVS)
 		end if
 		MStoInter = MStoInter - MDisInter
 		StotoDiscret_Clust = Conc
+		print *, "Ninf : ", ninf
 	else if (IVS.eq.(-1)) then
 		MDisVac = MStoVac*(real(ninf,8)/real(Npart,8))
 		if (sum(Conc) > 0._dp) then
@@ -758,6 +801,7 @@ function Sampling_Clust(Conc,HLangevin,IVS)
 		Conc_buff(BuffI_Index) = Conc(BuffI_Index)
 		Npart = size(HLangevin)
 		Mconc = sum(Conc_buff)
+		print *, "Mconc : ", Mconc
 		Nconc = int(Mconc*Npart/MStoInter)
 		MStoInter = MStoInter + Mconc	
 	else if (IVS.eq.(-1)) then
@@ -1050,11 +1094,14 @@ end function
 function Front_Inter(Conc)
 	implicit none
 	integer :: nloop
-	type(cluster), dimension(:) :: Conc
+	real(dp), dimension(:) :: Conc
 	logical :: Front_Inter
+	type(cluster) :: MonoInter, MonoVac
+	MonoInter = cluster(1,0,.True.)
+	MonoInter%ind = C2I(MonoInter)
 	Front_Inter = .True.
 	do nloop = 1, Nbound
-		if (Conc(FrontI_Index) > 1.e-2*Conc(int(MonoInter%ind))) then
+		if (Conc(FrontI_Index(nloop)) > 1.e-2*Conc(int(MonoInter%ind))) then
 			Front_Inter = .False.
 		end if
 	end do
@@ -1064,11 +1111,14 @@ end function
 function Front_Vac(Conc)
 	implicit none
 	integer :: nloop
-	type(cluster), dimension(:) :: Conc
+	real(dp), dimension(:) :: Conc
 	logical :: Front_Vac
+	type(cluster) :: MonoInter, MonoVac
+	MonoVac = cluster(-1,0,.True.)
+	MonoVac%ind = C2I(MonoVac)
 	Front_Vac = .True.
 	do nloop = 1, Nbound
-		if (Conc(FrontV_Index) > 1.e-2*Conc(int(MonoVac%ind))) then
+		if (Conc(FrontV_Index(nloop)) > 1.e-2*Conc(int(MonoVac%ind))) then
 			Front_Vac = .False.
 		end if
 	end do
@@ -1079,7 +1129,13 @@ end function
 ! Somme sur les amas stochastiques
 subroutine Amas_Sto
 	implicit none
+	integer :: iloop, mloop
 	type(cluster) :: C_mob, C_diff
+	type(cluster) :: MonoInter, MonoVac
+	MonoInter = cluster(1,0,.True.)
+	MonoInter%ind = C2I(MonoInter)
+	MonoVac = cluster(-1,0,.True.)
+	MonoVac%ind = C2I(MonoVac)
 	bCn_sto = 0._dp
 	aCmob_sto = 0._dp
 	Si_sto = 0._dp
@@ -1088,25 +1144,25 @@ subroutine Amas_Sto
 		do iloop = 1, Taille
 			do mloop = 1, Nmob
 				C_mob = c_constructor(real(mloop,8),0._dp)
-				C_diff = C_mob+XpartInter(iloop)
+				C_diff = C_mob+XpartInter_Clust(iloop)
 				rloop = real(mloop,8)
-				bCn_sto(mloop) = bCn_sto(mloop) - MStoInter/Taille*Beta_Clust_Fe(XpartInter(iloop),C_mob)
+				bCn_sto(mloop) = bCn_sto(mloop) - MStoInter/Taille*Beta_Clust_Fe(XpartInter_Clust(iloop),C_mob)
 				aCmob_sto(mloop) = aCmob_sto(mloop) + MStoInter/Taille*Alpha_Clust_Fe(C_diff,C_mob) 
 			end do
-			Si_sto = Si_sto + MStoInter/Taille*Beta_Clust_Fe(XpartInter(iloop),MonoInter)
-			Sv_sto = Sv_sto + MStoInter/Taille*Beta_Clust_Fe(XpartInter(iloop),MonoVac)
+			Si_sto = Si_sto + MStoInter/Taille*Beta_Clust_Fe(XpartInter_Clust(iloop),MonoInter)
+			Sv_sto = Sv_sto + MStoInter/Taille*Beta_Clust_Fe(XpartInter_Clust(iloop),MonoVac)
 		enddo
 	end if
 	if (Coupling_Vac) then
 		do iloop = 1, Taille
 			do mloop = 1, Nmob
 				C_mob = c_constructor(real(mloop,8),0._dp)
-				C_diff = C_mob+XpartInter(iloop)
-				bCn_sto(mloop) = bCn_sto(mloop) - MStoVac/Taille*Beta_Clust_Fe(XpartVac(iloop),C_mob)
+				C_diff = C_mob+XpartInter_Clust(iloop)
+				bCn_sto(mloop) = bCn_sto(mloop) - MStoVac/Taille*Beta_Clust_Fe(XpartVac_Clust(iloop),C_mob)
 				aCmob_sto(mloop) = aCmob_sto(mloop) + MStoVac/Taille*Alpha_Clust_Fe(C_diff,C_mob) 
 			end do
-			Si_sto = Si_sto + MStoVac/Taille*Beta_Clust_Fe(XpartVac(iloop),MonoInter)
-			Sv_sto = Sv_sto + MStoVac/Taille*Beta_Clust_Fe(XpartVac(iloop),MonoVac)
+			Si_sto = Si_sto + MStoVac/Taille*Beta_Clust_Fe(XpartVac_Clust(iloop),MonoInter)
+			Sv_sto = Sv_sto + MStoVac/Taille*Beta_Clust_Fe(XpartVac_Clust(iloop),MonoVac)
 		enddo
 	end if
 end subroutine Amas_Sto

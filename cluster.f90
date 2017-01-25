@@ -35,7 +35,7 @@ interface assignment (=)
 end interface
 
 
-type(cluster) :: C_null = cluster(0._dp,0._dp,.False.,0)
+type(cluster), parameter :: C_null = cluster(0._dp,0._dp,.False.,0)
 	
 CONTAINS
 

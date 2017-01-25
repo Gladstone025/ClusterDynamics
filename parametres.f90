@@ -19,8 +19,8 @@ integer, parameter :: Nb_Inter = 400
 integer, parameter :: Nf_Vac = 200
 integer, parameter :: Nb_Vac = 50
 
-integer, parameter :: Nf_Sol = 200
-integer, parameter :: Nb_Sol = 50
+integer, parameter :: Nf_Sol = 0
+integer, parameter :: Nb_Sol = 0
 
 integer :: Nbound
 
@@ -71,10 +71,12 @@ real(dp), dimension(:,:), allocatable :: Alpha_tab, Beta_tab
 real(dp), dimension(:,:,:), allocatable :: Alpha_tab_Sol, Beta_tab_Sol
 
 !! ----------------------- Parametres stochastiques ------------------------- !!
-integer, parameter :: Taille = 50000
+integer, parameter :: Taille = 100000
 real(dp), dimension(Taille) :: Xpart = 0._dp
 real(dp), dimension(Taille) :: XpartInter = 0._dp
 real(dp), dimension(Taille) :: XpartVac = 0._dp
+type(cluster), dimension(Taille) :: XpartInter_Clust = C_null
+type(cluster), dimension(Taille) :: XpartVac_Clust = C_null
 real(dp), dimension(:), allocatable :: C_sto, C_tot
 
 real(dp) :: bCnCi_sto, aCi_sto, Si_sto
@@ -98,6 +100,38 @@ real(dp), parameter :: h = 0.4_dp
 
 
 CONTAINS
+
+function F_Clust_Fe(C_nu,ConcMob)
+	implicit none
+	type(cluster) :: C_nu, C_mob
+	real(dp) :: rloop
+	real(dp) :: F_Clust_Fe
+	real(dp), dimension(:) :: ConcMob
+	integer :: mloop
+	F_Clust_Fe = 0._dp
+	do mloop = 1, Nmob
+		C_mob = Mob(mloop)
+		rloop = C_mob%defect
+		F_Clust_Fe = F_Clust_Fe + rloop*(Beta_Clust_Fe(C_nu,C_mob)*ConcMob(mloop) - Alpha_Clust_Fe(C_nu,C_mob))
+	end do
+end function
+
+function D_Clust_Fe(C_nu,ConcMob)
+	implicit none
+	type(cluster) :: C_nu, C_mob
+	real(dp) :: rloop
+	real(dp) :: D_Clust_Fe
+	real(dp), dimension(:) :: ConcMob
+	integer :: mloop
+	D_Clust_Fe = 0._dp
+	do mloop = 1, Nmob
+		C_mob = Mob(mloop)
+		rloop = C_mob%defect
+		D_Clust_Fe = D_Clust_Fe + 0.5_dp*rloop*rloop*(Beta_Clust_Fe(C_nu,C_mob)*ConcMob(mloop) + Alpha_Clust_Fe(C_nu,C_mob))
+	end do
+end function
+
+
 
 
 function Alpha_Clust(c_nu,c_mu)

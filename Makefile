@@ -13,8 +13,8 @@ F90 = mpif90
 #F90OPT = -O3 -align dcommons -tpp7
 #F90OPT = -mcmodel=medium -shared-intel -O2  -C
 #F90OPT = -g -C -traceback -warn 
-#F90OPT = -O3 
-F90OPT = -g -fbacktrace -fbounds-check
+F90OPT = -O3 
+#F90OPT = -g -fbacktrace -fbounds-check
 #F90OPT = -g -C #-Wall -fbacktrace
 libdir       = /home/pierre/sundials-2.6.2/sundials/install/lib
 LIBRARIES = -lsundials_fcvode -lsundials_cvode -lsundials_fnvecserial -lsundials_nvecserial ${LIBS}

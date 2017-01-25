@@ -28,11 +28,12 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 	real(dp), dimension(-mv:mi,0:ms) :: CmobSol, bCnCmobSol, aCmobSol
 	integer :: index_mob
 	type(cluster) :: C_nu, C_mu, C_mob, C_diff
-	type(cluster) :: MonoVac, MonoInter
+	type(cluster) :: MonoVac, MonoInter, C_zero
 	MonoVac = cluster(-1._dp, 0._dp,.True.,0)
 	MonoVac%ind = C2I(MonoVac)
 	MonoInter = cluster(1._dp, 0._dp,.True.,0)
 	MonoInter%ind = C2I(MonoInter)
+	C_zero = C_constructor(0._dp,0._dp)
 	!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	ConcP(1:Neq) = 0.d0
 	IER = 0
@@ -306,16 +307,20 @@ subroutine FCVFUN(T, Conc, ConcP, IPAR, RPAR, IER) bind(c,name='fcvfun_')
 		do nloop = 1, Neq
 			ConcP(nloop) = ConcP(nloop) + G_source(nloop)
 		end do
-		! Ajout des forces de puits
-		Si = Si - 2._dp*Beta_Clust(MonoInter,MonoInter)*Conc(nint(MonoInter%ind))
-		Sv = Sv - 2._dp*Beta_Clust(MonoVac,MonoVac)*Conc(nint(MonoVac%ind))
+		! Ajout des forces de puits effectives
+		do mloop = 1, Nmob
+			C_mob = Mob(mloop)
+			ConcP(nint(C_mob%ind)) = ConcP(nint(C_mob%ind)) + bCn_sto(mloop)*Conc(nint(C_mob%ind)) + aCmob_sto(mloop)
+		end do
+		Si = Si + Si_sto - 2._dp*Beta_Clust(MonoInter,MonoInter)*Conc(nint(MonoInter%ind))
+		Sv = Sv + Sv_sto- 2._dp*Beta_Clust(MonoVac,MonoVac)*Conc(nint(MonoVac%ind))
 		ConcP(nint(MonoInter%ind)) = ConcP(nint(MonoInter%ind)) - Z_i*rho_d*D_i*(Conc(nint(MonoInter%ind)) - Ci_eq) - &
 											&6._dp/l_gb*sqrt(Z_i*rho_d+Si/D_i)*D_i*(Conc(nint(MonoInter%ind)) - Ci_eq)
 		ConcP(nint(MonoVac%ind)) = ConcP(nint(MonoVac%ind)) - Z_v*rho_d*D_v*(Conc(nint(MonoVac%ind)) - Cv_eq) - &
 											&6._dp/l_gb*sqrt(Z_v*rho_d+Sv/D_v)*D_v*(Conc(nint(MonoVac%ind)) - Cv_eq)
 		! Gestion de (0,0)
-		ConcP(nint(C_null%ind)) = 0._dp
-		print *, T
+		ConcP(nint(C_zero%ind)) = 0._dp
+		!print *, T
 	else
 		print *, "Cas physique inexistant"
 		IER = 1
